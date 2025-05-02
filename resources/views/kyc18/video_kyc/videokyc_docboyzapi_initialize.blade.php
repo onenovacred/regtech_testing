@@ -1,0 +1,85 @@
+@extends('adminlte::page')
+
+@section('title', 'AdminLTE')
+
+@section('content_header')
+<!-- @section('content_header') -->
+    <!-- <h1 class="m-0 text-dark">Scheme Details</h1> -->
+@stop
+
+@section('content')
+<!-- <div class="row">
+    <div class="col-md-6 offset-md-3">
+        <div class="card card-primary">
+            <div class="card-header">
+                <h3 class="card-title">PAN CARD Verification</h3>
+            </div>
+            <div class="card-body">
+                <!-- @if($statusCode == '422')
+                    <div class="alert alert-danger" role="alert">
+                        PAN is Invalid 
+                  </div>
+                @endif
+                @if($statusCode == '404' || null)
+                <div class="alert alert-danger" role="alert">
+                    Server Error, Please try later
+                </div>
+                @endif -->
+                <div class="row">
+                    <div class="col-md-6 offset-md-3">
+                        <form role="form" method="post" action="{{route('kyc.pancard')}}">
+                            {{csrf_field()}}
+                                <div class="form-group">
+                                    <label for="name">PAN Number</label>
+                                <input type="text" class="form-control" 
+                                    maxlength="10" minlength="10" 
+                                    id="pan_number" name="pan_number" value="{{old('pan_number')}}" 
+                                    placeholder="Ex: ABCDE1234N" required>
+                                </div>
+                                <button type="submit" class="btn btn-success">Verify</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- @if(!empty($pancard) && $pancard['status_code'] == 200) -->
+        <div class="card card-success">
+            <div class="card-header">
+                <h3 class="card-title">PAN CARD Details</h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                      <div>
+                        <p>Full Name: {{ $pancard['data']['full_name'] }}</p>
+                        <p>PAN no: {{ $pancard['data']['pan_number'] }}</p>
+                        <p>PAN Verification: {{ $pancard['message_code'] }}</p>
+                      </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        @endif
+
+        @if($hit_limits_exceeded==1)
+        <div class="card card-danger">
+            <div class="card-header">
+                <h3 class="card-title">Sorry</h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <p>Your free usage of API are ends. Please subscribe to plan.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        @endif
+    </div>
+</div> -->
+@stop
+
+
+@section('custom_js')
+@stop
