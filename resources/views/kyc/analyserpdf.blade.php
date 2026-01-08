@@ -25,20 +25,20 @@
 		table{
 			width:100%;
 		}
-	
+
 		.data-title{
 			background-color:#8B0000;
 			color:#FFFFFF;
 			height:20px;
 			table-layout: fixed;
-			-webkit-font-smoothing: antialiased;	
+			-webkit-font-smoothing: antialiased;
 		}
-	
+
 		/* .header img {
 			float: left;
 			width: 150px;
 			height: 140px;
-			
+
 		} */
 
 		.header h3{
@@ -70,7 +70,7 @@
 	</style>
 
 </head>
-<body> 
+<body>
 	<header>
 		<div class = "header">
 			<div class="row">
@@ -78,13 +78,13 @@
 					<img src = "{{public_path('/logos/regtech.png')}}" alt="logo" style="margin-left:40px; margin-bottom:6px; width:10%; height:65px">
 				</div>
 				<img src = "{{public_path('/logos/regtech4.png')}}" alt="logo" style="margin-left:30px; width:15%; height:35px">
-				
-			</div>	
-			</div>	
-			
-			
+
+			</div>
+			</div>
+
+
 		</div>
-	
+
 	</header>
 	<main>
 	<hr>
@@ -109,24 +109,24 @@
 							<td>Bank</td>
 							<td>MonthAndYear</td>
 							<td>Total</td>
-							
+
 						</tr>
 					</thead>
 					<tbody class="table-style">
 						@foreach($atm_withdrawl as $atm_withdrawls)
 							<tr>
 								<td>{{isset($atm_withdrawls['date']) ? $atm_withdrawls['date']  : ""}}</td>
-							
+
 								<td>{{isset($atm_withdrawls['amount']) ? $atm_withdrawls['amount']  : ""}}</td>
 								<td>{{isset($atm_withdrawls['description']) ? $atm_withdrawls['description']  : ""}}</td>
 								<td>{{isset($atm_withdrawls['bank']) ? $atm_withdrawls['bank']  : ""}}</td>
 								<td>{{isset($atm_withdrawls['monthAndYear']) ? $atm_withdrawls['monthAndYear']  : ""}}</td>
 								<td>{{isset($atm_withdrawls['total']) ? $atm_withdrawls['total']  : ""}}</td>
 							</tr>
-						@endforeach	
-					
+						@endforeach
+
 					</tbody>
-					
+
 				</table>
 			</div>
 		<hr>
@@ -148,7 +148,7 @@
 						<tr>
 							<td>MonthAndYear</td>
 							<td>netAverageBalance</td>
-							
+
 						</tr>
 					</thead>
 					<tbody class="table-style">
@@ -157,10 +157,10 @@
 								<td>{{isset($averageMonthlyBalances['monthAndYear']) ? $averageMonthlyBalances['monthAndYear']  : ""}}</td>
 								<td>{{isset($averageMonthlyBalances['netAverageBalance']) ? $averageMonthlyBalances['netAverageBalance']  : ""}}</td>
 							</tr>
-						@endforeach	
-					
+						@endforeach
+
 					</tbody>
-					
+
 				</table>
 			</div>
 		<hr>
@@ -182,19 +182,19 @@
 						<tr>
 							<td>MonthAndYear</td>
 							<td>netAverageBalance</td>
-							
+
 						</tr>
 					</thead>
-					<tbody class="table-style">
+					{{-- <tbody class="table-style">
 						@foreach($averageQuarterlyBalance as $averageQuarterlyBalances)
 							<tr>
 								<td>{{isset($averageQuarterlyBalances['monthAndYear']) ? $averageQuarterlyBalances['monthAndYear']  : ""}}</td>
 								<td>{{isset($averageQuarterlyBalances['netAverageBalance']) ? $averageQuarterlyBalances['netAverageBalance']  : ""}}</td>
 							</tr>
-						@endforeach	
-					
-					</tbody>
-					
+						@endforeach
+
+					</tbody> --}}
+
 				</table>
 			</div>
 		<hr>
@@ -230,10 +230,10 @@
 								<td>{{isset($expensess['amount']) ? $expensess['amount']  : ""}}</td>
 								<td>{{isset($expensess['mode']) ? $expensess['mode']  : ""}}</td>
 							</tr>
-						@endforeach	
-					
+						@endforeach
+
 					</tbody>
-					
+
 				</table>
 			</div>
 		<hr>
@@ -268,10 +268,10 @@
 								<td>{{isset($high_value_transactionss['amount']) ? $high_value_transactionss['amount']  : ""}}</td>
 								<td>{{isset($high_value_transactionss['balanceAfterTranscation']) ? $high_value_transactionss['balanceAfterTranscation']  : ""}}</td>
 							</tr>
-						@endforeach	
-					
+						@endforeach
+
 					</tbody>
-					
+
 				</table>
 			</div>
 		<hr>
@@ -309,10 +309,10 @@
 								<td>{{isset($incomess['amount']) ? $incomess['amount']  : ""}}</td>
 								<td>{{isset($incomess['balanceAfterTransaction']) ? $incomess['balanceAfterTransaction']  : ""}}</td>
 							</tr>
-						@endforeach	
-					
+						@endforeach
+
 					</tbody>
-					
+
 				</table>
 			</div>
 		<hr>
@@ -348,10 +348,10 @@
 								<td>{{isset($minimum_balancess['amount']) ? $minimum_balancess['amount']  : ""}}</td>
 								<td>{{isset($minimum_balancess['balanceAfterTransaction']) ? $minimum_balancess['balanceAfterTransaction']  : ""}}</td>
 							</tr>
-						@endforeach	
-					
+						@endforeach
+
 					</tbody>
-					
+
 				</table>
 			</div>
 		<hr>
@@ -389,18 +389,18 @@
 								<td>{{isset($money_received_transactionss['amount']) ? $money_received_transactionss['amount']  : ""}}</td>
 								<td>{{isset($money_received_transactionss['balanceAfterTransaction']) ? $money_received_transactionss['balanceAfterTransaction']  : ""}}</td>
 							</tr>
-						@endforeach	
-					
+						@endforeach
+
 					</tbody>
-					
+
 				</table>
 			</div>
 		<hr>
 	</main>
 	<footer class="footer">
-		<hr tyle = "color:red;">	
+		<hr tyle = "color:red;">
 		<div class="footer__inner">
-			<h3 style = "color:darkblue;margin-left:40px">@ Powered by RegTech&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Contact Us: support@docboyz.in</h3>
+			<h3 style = "color:darkblue;margin-left:40px">@ Powered by RegTech&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Contact Us: support@regtechapi.in</h3>
 		</div>
     </footer>
 </body>

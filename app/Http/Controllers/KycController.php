@@ -26,8 +26,11 @@ use DOMDocument;
 use App\Models\Transaction;
 use Carbon\Carbon;
 use DB;
-
-
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
+// use Illuminate\Support\Facades\Str;
+use Illuminate\Support\Str;
+use Illuminate\Http\Request as HttpRequest;
 class KycController extends Controller
 {
     public function __construct()
@@ -43,6 +46,113 @@ class KycController extends Controller
     private $base_url = 'https://kyc-api.flowboard.in/api/v1';
     private $token = 'Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE2MDI3Njc0NDUsIm5iZiI6MTYwMjc2NzQ0NSwianRpIjoiNzRjNzRmNjMtNGZhNS00N2I0LTkxYmYtNjcyYjZiMmRjNzYyIiwiZXhwIjoxOTE4MTI3NDQ1LCJpZGVudGl0eSI6ImRldi5kb2Nib3l6QGZsb3dib2FyZC5pbiIsImZyZXNoIjpmYWxzZSwidHlwZSI6ImFjY2VzcyIsInVzZXJfY2xhaW1zIjp7InNjb3BlcyI6WyJyZWFkIl19fQ.2vNK9AhqCAk5Vz3K9rAZ_YtxIzTLoxK8zejh-ES4Meo';
 
+    public function saveHitCount($user_id, $api_id, $remark, $statusCode)
+    {
+        // dd($statusCode);
+        $cnt200 = 0;
+        $cnt400 = 0;
+        $cnt101 = 0;
+        $payableHits = 0;
+        $scheme_price = 0;
+        $total_amount = 0;
+        $updateHitCount = UserSchemeMaster::where('user_id', $user_id)->where('api_id', $api_id)->orderBy('id', 'desc')->first();
+        $payment_slab = explode(',', $updateHitCount->payment_slab);
+        $scheme_prices = explode(',', $updateHitCount->scheme_price);
+        // $transactions = Transaction::where('user_id', $user_id)->where('api_id',$api_id)->where('hit_year_month', date('Y-m'))->get();
+        $transactions = Transaction::where('user_id', $user_id)->where('api_id', $api_id)->where('hit_year_month', date('Y-m'))->count();
+        if ($transactions) {
+            // for($i=0; $i<count($transactions);$i++){
+            //     if($transactions[$i]['status_code'] == 102){
+            //         $cnt400++;
+            //     }else if($transactions[$i]['status_code'] == 200){
+            //         $cnt200++;
+            //     }else if($transactions[$i]['status_code'] == 101){
+            //         $cnt101++;
+            //     }
+            // }
+            // $payableHits = $cnt200 + $cnt400 + $cnt101;
+            $payableHits = $transactions;
+
+            for ($i = 0; $i < count($payment_slab); $i++) {
+                if ($i == (count($payment_slab) - 1)) {
+                    if ($payableHits <= $payment_slab[$i]) {
+                        $scheme_price = $scheme_prices[$i];
+                        $total_amount = $payableHits * $scheme_prices[$i];
+                    } else {
+                        $scheme_price = $scheme_prices[$i];
+                        $total_amount = $payableHits * $scheme_prices[$i];
+                    }
+                    break;
+                } else {
+                    if ($payableHits <= $payment_slab[$i]) {
+                        $scheme_price = $scheme_prices[$i];
+                        $total_amount = $payableHits * $scheme_prices[$i];
+                        break;
+                    }
+                }
+            }
+        } else {
+            $scheme_price = $scheme_prices[0];
+            $total_amount = $scheme_prices[0];
+        }
+
+        $updateHitCount->update([
+            'total_transaction_amount_per_api' => $total_amount
+        ]);
+
+        $addHitCount = new HitCountMaster;
+        $addHitCount->user_id = $user_id;
+        $addHitCount->api_id = $api_id;
+        $addHitCount->scheme_price = $scheme_price;
+        $addHitCount->hit_year_month = date('Y-m');
+        $addHitCount->hit_count = 1;
+        $addHitCount->save();
+        // dd($statusCode);
+        $this->update_wallet_balance($user_id, $scheme_price);
+        $this->update_transaction($user_id, $api_id, $scheme_price, $remark, $statusCode);
+    }
+
+    public function update_wallet_balance($user_id, $amount)
+    {
+        $userwallet = User::where('id', $user_id)->first();
+        $subusercount = User::where('subparent_id', $user_id)->Where('subparent_id','!=', 1)->count();
+
+        if($userwallet->subparent_id !=1 || $subusercount > 0){
+
+            if($subusercount > 0){
+            // return '$finalamountsss';
+                $finalamount = $userwallet->wallet_amount - $amount;
+                $userwallet->wallet_amount = $finalamount;
+                $userwallet->save();
+                $updatewalletbalance = User::where('subparent_id', $user_id)->update(['wallet_amount' =>$finalamount]);
+
+            }
+            else{
+                // return 
+                $finalamount = $userwallet->wallet_amount - $amount;
+                $subparent = $userwallet->subparent_id;
+              
+                // $userwallet->wallet_amount = $finalamount;
+                // $userwallet->save();
+
+                $updatewalletbalance = User::where('subparent_id', $subparent)->update(['wallet_amount' =>$finalamount]);
+                $updatewalletbalanceparent = User::where('id', $subparent)->update(['wallet_amount' =>$finalamount]);
+                
+
+            }
+           
+
+
+        }
+        else{
+
+            $userwallet->wallet_amount = $userwallet->wallet_amount - $amount;
+            $userwallet->save();
+
+        }
+        
+    }
+    
     public function transaction_id()
     {
         $str_result = '1234567890';
@@ -56,13 +166,34 @@ class KycController extends Controller
         return $transaction_gen;
     }
 
-    public function update_transaction($api_id, $amount, $remark, $statusCode)
+    public function update_transaction($user_id, $api_id, $amount, $remark, $statusCode)
     {
+        // dd($statusCode);
+        // $transaction = new Transaction;
+        // $transaction->transaction_id = $this->transaction_id();
+        // $transaction->user_id = Auth()->user()->id;
+        // $transaction->api_id = $api_id; //work
+        // $transaction->type_creditdebit = 'Debit';
+        // $transaction->scheme_price = $amount;  //work
+        // if ($statusCode == 200) {
+        //     $transaction->status = 'Success';
+        // } else {
+        //     $transaction->status = 'Failed';
+        // }
+        // $transaction->status_code = $statusCode;
+        // // $transaction->status = 'Success';
+        // $transaction->amount = $amount;
+        // $transaction->remark = $remark;
+        // $transaction->updated_balance = Auth()->user()->wallet_amount - $amount;
+        // $transaction->save();
+        $user_id = Auth()->user()->id;
+        $user = User::where('id', $user_id)->first();
         $transaction = new Transaction;
         $transaction->transaction_id = $this->transaction_id();
-        $transaction->user_id = Auth()->user()->id;
+        $transaction->user_id = $user_id;
         $transaction->api_id = $api_id; //work
         $transaction->type_creditdebit = 'Debit';
+        $transaction->hit_year_month = date('Y-m');
         $transaction->scheme_price = $amount;  //work
         if ($statusCode == 200) {
             $transaction->status = 'Success';
@@ -70,20 +201,26 @@ class KycController extends Controller
             $transaction->status = 'Failed';
         }
         $transaction->status_code = $statusCode;
-        // $transaction->status = 'Success';
         $transaction->amount = $amount;
         $transaction->remark = $remark;
-        $transaction->updated_balance = Auth()->user()->wallet_amount - $amount;
+        if ($statusCode != 500) {
+            $transaction->updated_balance = $user->wallet_amount - $amount;
+            $user->wallet_amount -= $amount;
+        } else {
+            $transaction->updated_balance = $user->wallet_amount;
+        }
+        // dd($transaction);
         $transaction->save();
+        $user->save();
     }
 
-    public function update_wallet_balance($amount)
-    {
-        $userwallet = User::where('id', Auth()->user()->id)->first();
-        // $userwallet->wallet_amount = $userwallet->wallet_amount - $amount;
-        $userwallet->wallet_amount = $userwallet->wallet_amount;
-        $userwallet->save();
-    }
+    // public function update_wallet_balance($amount)
+    // {
+    //     $userwallet = User::where('id', Auth()->user()->id)->first();
+    //     // $userwallet->wallet_amount = $userwallet->wallet_amount - $amount;
+    //     $userwallet->wallet_amount = $userwallet->wallet_amount;
+    //     $userwallet->save();
+    // }
 
     // public function pancard(Request $request) {
     //     $statusCode = null;
@@ -241,6 +378,14 @@ class KycController extends Controller
             }
         }
 
+        if($pancard['statusCode'] == 200){
+              $pdf = Pdf::loadView('kyc.pancardvalidation_pdf', [
+                'pancard' => $pancard
+            ]);
+          return $pdf->download('pancardvalidation.pdf');
+        //   return view('kyc.rc_validation', compact('rc_validation', 'checkWeight', 'statusCode', 'hit_limits_exceeded'));
+        }
+
         return view('kyc.pancard', compact('pancard', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
     }
 
@@ -360,8 +505,9 @@ class KycController extends Controller
                 'pan_number' => $request->pan_number
             ];
             if (Auth::user()->scheme_type != 'demo') {
+                // return 't11';
                 if (Auth::user()->role_id == 1) {
-                    $apiamster = ApiMaster::where('api_slug', 'pancard')->first();
+                    $apiamster = ApiMaster::where('api_slug', 'pandetails1')->first();
                     if ($apiamster)
                         $api_id = $apiamster->id;
                 }
@@ -369,6 +515,7 @@ class KycController extends Controller
                     $res = $client->post('http://regtechapi.in/api/pancard_details', ['headers' => $headers, 'json' => $body]);
 
                     $pancard = json_decode($res->getBody(), true);
+                    // return $pancard;
                     if (isset($pancard[0]['pancard']['code'])) {
                         $statusCode = $pancard[0]['pancard']['code'];
                     }
@@ -384,7 +531,7 @@ class KycController extends Controller
                     return view('kyc.pandetails', compact('statusCode', 'errorMessage'));
                 }
             } else {
-
+                //    return 't2';
                 $scheme_type = SchemeTypeMaster::where('id', Auth::user()->scheme_type_id)->first();
                 $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
                 if ($hit_count_remaining > 0) {
@@ -414,13 +561,21 @@ class KycController extends Controller
                 }
             }
         }
+          if($pancard['statusCode'] == 200){
+            // return $pancard;
+              $pdf = Pdf::loadView('kyc.pandetails_pdf', [
+                'pancard' => $pancard
+            ]);
+          return $pdf->download('pandetails.pdf');
+        //   return view('kyc.rc_validation', compact('rc_validation', 'checkWeight', 'statusCode', 'hit_limits_exceeded'));
+        }
 
         return view('kyc.pandetails', compact('pancard', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
     }
-
     //pan upload api implementation
     public function pancard_upload(Request $request)
     {
+        // return 'ok'; 
         $statusCode = null;
         $pancard = null;
         $hit_limits_exceeded = 0;
@@ -1025,6 +1180,14 @@ class KycController extends Controller
                 }
             }
         }
+    //    return $passportverify;
+         if($passportverify['statusCode'] == 200){
+              $pdf = Pdf::loadView('kyc.passport_details_pdf', [
+                'passportverify' => $passportverify
+            ]);
+          return $pdf->download('passportverify.pdf');
+          return view('kyc.rc_validation', compact('rc_validation', 'checkWeight', 'statusCode', 'hit_limits_exceeded'));
+        }
         return view('kyc.passportverify', compact('passportverify', 'statusCode', 'hit_limits_exceeded'));
     }
 
@@ -1186,6 +1349,7 @@ class KycController extends Controller
                 }
             }
         }
+        // return $aadhaar_otp_genrate['data']['request_id'];
         return view('kyc.aadhaar_otp_genrate', compact('aadhaar_otp_genrate', 'statusCode', 'hit_limits_exceeded'));
     }
 
@@ -1266,8 +1430,20 @@ class KycController extends Controller
             }
         }
         // dd($aadhaar_validation);
-        return view('kyc.aadhaar_otp_submit', compact('aadhaar_validation', 'statusCode', 'hit_limits_exceeded'));
+
+        // 
+        //    $pdf = Pdf::loadView('kyc.aadhaar_pdf', compact('aadhaar_validation'));
+        // return  $aadhaar_validation;
+        if($aadhaar_validation['status'] == 200){
+                    $pdf = Pdf::loadView('kyc.aadhaar_pdf', [
+                        'aadhaar_validation' => $aadhaar_validation
+                    ]);
+                return $pdf->download('  -.pdf');
+                // return view('kyc.aadhaar_otp_submit', compact('aadhaar_validation', 'statusCode', 'hit_limits_exceeded'));
+        }
+         return view('kyc.aadhaar_otp_submit', compact('aadhaar_validation', 'statusCode', 'hit_limits_exceeded'));
     }
+          
 
     // aadhar masking python intigration needed
 
@@ -1301,7 +1477,7 @@ class KycController extends Controller
                 CURLOPT_CUSTOMREQUEST => "POST",
                 CURLOPT_POSTFIELDS => array(
                     "file" => new \CURLFILE($_FILES['file']['tmp_name'], $_FILES['file']['type'], $_FILES['file']['name']),
-                    "file_back" => new \CURLFILE($_FILES['file_back']['tmp_name'], $_FILES['file_back']['type'], $_FILES['file_back']['name']),
+                    // "file_back" => new \CURLFILE($_FILES['file_back']['tmp_name'], $_FILES['file_back']['type'], $_FILES['file_back']['name']),
                 ),
                 CURLOPT_HTTPHEADER => array(
                     "AccessToken: " . $accessToken,
@@ -1311,12 +1487,95 @@ class KycController extends Controller
             $result = curl_exec($curl1);
             $aadhaar_masking = json_decode($result, true);
 
+            
+            
+            // if($aadhaar_masking){
+            //     $pdf = Pdf::loadView('kyc.aadhaar_masking_pdf', [
+            //         'aadhaar_masking' => $aadhaar_masking
+            //     ]);
+            // }
+            // else{
+            // return 'Service Down';
+            // }
+            // return $aadhaar_masking[0]['aadhaar_masked_details']['files'][0]['masked_image_base64'];
+            // return $aadhaar_masking[0]['aadhaar_masked_details']['masked_image_base64'];
+
         }
         return view('kyc.aadhaar_masking', compact('aadhaar_masking', 'statusCode', 'hit_limits_exceeded'));
     }
 
     // Voter id  Validation 
-    public function voter_validation(Request $request)
+
+        public function voter_validation(Request $request)
+    {
+        $statusCode = null;
+        $voter_validation = null;
+        $hit_limits_exceeded = 0;
+
+        if ($request->isMethod('GET')) {
+            return view('kyc.voter_validation', compact('voter_validation', 'statusCode', 'hit_limits_exceeded'));
+        }
+        if ($request->isMethod('POST')) {
+            $client = new Client();
+            $accessToken = Auth::user()->access_token;
+
+            $headers = [
+                'AccessToken' => $accessToken,
+            ];
+
+            $body = [
+                'voter_number' => $request->voter_number
+            ];
+
+            if (Auth::user()->scheme_type != 'demo') {
+                if (Auth::user()->role_id == 1) {
+                    $apiamster = ApiMaster::where('api_slug', 'voter_id')->first();
+                    if ($apiamster)
+                        $api_id = $apiamster->id;
+                }
+                try {
+                    $res = $client->post('http://regtechapi.in/api/voter_validation', ['headers' => $headers, 'json' => $body]);
+                    $voter_validation = json_decode($res->getBody(), true);
+                    $statusCode = 200;
+
+                } catch (BadResponseException $e) {
+                    $statusCode = $e->getResponse()->getStatusCode();
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in. for more details';
+                    return view('kyc.voter_validation', compact('statusCode', 'errorMessage'));
+                }
+            } else {
+                $scheme_type = SchemeTypeMaster::where('id', Auth::user()->scheme_type_id)->first();
+                $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+                if ($hit_count_remaining > 0) {
+                    try {
+                        $res = $client->post('http://regtechapi.in/api/voter_validation', ['headers' => $headers, 'json' => $body]);
+                        $voter_validation = json_decode($res->getBody(), true);
+                        $user = User::where('id', Auth::user()->id)->first();
+                        $user->scheme_hit_count = $user->scheme_hit_count + 1;
+                        $user->save();
+                    } catch (BadResponseException $e) {
+                        $statusCode = $e->getResponse()->getStatusCode();
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in. for more details';
+                        return view('kyc.voter_validation', compact('statusCode', 'errorMessage'));
+                    }
+                } else {
+                    $hit_limits_exceeded = 1;
+                    return view('kyc.voter_validation', compact('voter_validation', 'statusCode', 'hit_limits_exceeded'));
+                }
+            }
+        }
+        if(isset($voter_validation[0]['statusCode'])){
+                $pdf = Pdf::loadView('kyc.voter_validation_pdf', [
+                'voter_validation' => $voter_validation
+            ]);
+           return $pdf->download('voter_validation.pdf');
+        }
+        // dd($voter_validation[0]['statusCode']);
+        return view('kyc.voter_validation', compact('voter_validation', 'statusCode', 'hit_limits_exceeded'));
+    }
+
+    
+    public function voter_validation18agust2025(Request $request)
     {
         $statusCode = null;
         $voter_validation = null;
@@ -1464,8 +1723,97 @@ class KycController extends Controller
         }
     }
 
-
     public function license_validation(Request $request)
+    {
+        $statusCode = null;
+        $license_validation = null;
+        $hit_limits_exceeded = 0;
+
+        if ($request->isMethod('GET')) {
+            return view('kyc.license_validation', compact('license_validation', 'statusCode', 'hit_limits_exceeded'));
+        }
+        if ($request->isMethod('POST')) {
+            $client = new Client();
+            // $headers = [
+            //     'Authorization' => $this->token,
+            //     'Accept'        => 'application/json',
+            // ];
+
+            // $body =  [
+            //     'id_number' => $request->license_number
+            // ];
+            $accessToken = Auth::user()->access_token;
+            // $date = Carbon::parse($request->dob)->format('Y-m-d');
+            $date = $request->dob;
+            // dd($request->dob);
+
+            $headers = [
+                'AccessToken' => $accessToken,
+                'accept' => 'application/json'
+            ];
+            $body = [
+                'license_number' => $request->license_number,
+                "dob" => $date
+            ];
+            if (Auth::user()->scheme_type != 'demo') {
+                // return 'test';
+                if (Auth::user()->role_id == 1) {
+                    $apiamster = ApiMaster::where('api_slug', 'license')->first();
+                    if ($apiamster)
+                        $api_id = $apiamster->id;
+                }
+
+                try {
+                    // $res = $client->post($this->base_url.'/driving-license/driving-license', ['headers' => $headers, 'json' => $body]);
+                    $res = $client->post('http://regtechapi.in/api/license_validation', ['headers' => $headers, 'json' => $body]);
+                    $license_validation = json_decode($res->getBody(), true);
+
+                    $statusCode = 200;
+
+                } catch (BadResponseException $e) {
+                    $statusCode = $e->getResponse()->getStatusCode();
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in. for more details';
+                    return view('kyc.license_validation', compact('statusCode', 'errorMessage'));
+                }
+            } else {
+                $scheme_type = SchemeTypeMaster::where('id', Auth::user()->scheme_type_id)->first();
+                $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+                if ($hit_count_remaining > 0) {
+                    try {
+                        $res = $client->post('http://regtechapi.in/api/license_validation', ['headers' => $headers, 'json' => $body]);
+                        //$res = $client->post($this->base_url.'/driving-license/driving-license', ['headers' => $headers, 'json' => $body]);
+                        $license_validation = json_decode($res->getBody(), true);
+
+                        $user = User::where('id', Auth::user()->id)->first();
+                        $user->scheme_hit_count = $user->scheme_hit_count + 1;
+                        $user->save();
+                        $statusCode = 200;
+                    } catch (BadResponseException $e) {
+                        $statusCode = $e->getResponse()->getStatusCode();
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in. for more details';
+                        return view('kyc.license_validation', compact('statusCode', 'errorMessage'));
+                    }
+                } else {
+                    $hit_limits_exceeded = 1;
+                    return view('kyc.license_validation', compact('license_validation', 'statusCode', 'hit_limits_exceeded'));
+                }
+            }
+        }
+        if(isset($license_validation[0]['statusCode'])){
+              $pdf = Pdf::loadView('kyc.license_validation_pdf', [
+                'license_validation' => $license_validation
+            ]);
+          return $pdf->download('license_validation.pdf');
+          return view('kyc.license_validation', compact('license_validation', 'checkWeight', 'statusCode', 'hit_limits_exceeded'));
+        }
+
+        // dd($license_validation[0]['license_validation']['code']);
+        // dd($license_validation);
+        return view('kyc.license_validation', compact('license_validation', 'statusCode', 'hit_limits_exceeded'));
+    }
+
+
+    public function license_validation18agust2025(Request $request)
     {
         $statusCode = null;
         $license_validation = null;
@@ -1733,6 +2081,18 @@ class KycController extends Controller
             }
         }
         // return $rc_validation['status_code'];
+        if($rc_validation['status_code'] == 200){
+              $pdf = Pdf::loadView('kyc.rcvalidation_pdf', [
+                'rc_validation' => $rc_validation
+            ]);
+          return $pdf->download('rc_details.pdf');
+          return view('kyc.rc_validation', compact('rc_validation', 'checkWeight', 'statusCode', 'hit_limits_exceeded'));
+        }
+        // $pdf = Pdf::loadView('kyc.rcvalidation_pdf', [
+        //         'rc_validation' => $rc_validation
+        //     ]);
+        // return $pdf->download('rc_details.pdf');
+
         return view('kyc.rc_validation', compact('rc_validation', 'checkWeight', 'statusCode', 'hit_limits_exceeded'));
     }
     public function rc_validationlite(Request $request)
@@ -1779,6 +2139,7 @@ class KycController extends Controller
                     //$res = $client->post($this->base_url.'/rc/rc-full', ['headers' => $headers, 'json' => $body]);
                     $res = $client->post('http://regtechapi.in/api/rc_validationlite', ['headers' => $headers, 'json' => $body]);
                     $rc_validation = json_decode($res->getBody(), true);
+                    // return $rc_validation;
 
                     // if(isset($rc_validation[0]['rc_validation']['data']['vehicle_gross_weight'])){
                     //     $grossWeight = $rc_validation[0]['rc_validation']['data']['vehicle_gross_weight'];
@@ -2157,7 +2518,383 @@ class KycController extends Controller
             }
         }
     }
-    public function bank_analyser(Request $request)
+
+//     public function bank_analyser(Request $request)
+//     {
+//         Log::info('Starting bank_analyser function', ['method' => $request->method(), 'user' => Auth::check() ? Auth::id() : 'Guest', 'query' => $request->query()]);
+
+//         // Handle streaming request
+//         if ($request->query('stream') && session('pdf_data')) {
+//             Log::info('Handling PDF stream request');
+//             $data = session('pdf_data');
+//             Log::info('Generating PDF for streaming from session data');
+//             $pdf = Pdf::loadView('kyc.analyserpdf', [
+//                 'metadata' => $data['metadata'] ?? [],
+//                 'summary' => $data['summary'] ?? [],
+//                 'transactions' => $data['transactions'] ?? [],
+//                 'high_value_txns' => $data['summary']['high_value_txns'] ?? [],
+//                 'insights' => $data['insights'] ?? []
+//             ])->setPaper('A4');
+
+//             // Clear session data
+//             session()->forget('pdf_data');
+//             Log::info('Session data cleared');
+
+//             Log::info('Streaming PDF to browser');
+//             return $pdf->stream('bank-statement-' . Str::uuid() . '.pdf', ['Attachment' => false]);
+//         }
+
+//         // Handle GET request for form
+//         if ($request->isMethod('GET')) {
+//             return view('kyc.bankanalyser');
+//         }
+
+//         // Check authentication
+//         if (!Auth::check()) {
+//             return redirect()->route('login')->with('error', 'Please log in to continue.');
+//         }
+
+//         $user = Auth::user();
+//         Log::info('User authenticated', ['user_id' => $user->id, 'email' => $user->email]);
+
+//         // return $user;
+//         // Fetch API ID for bank analyzer
+//         $apiMaster = ApiMaster::where('api_slug', 'bank_anlyser')->first();
+//         $api_id = $apiMaster ? $apiMaster->id : null;
+
+//         // Check if user is registered for the service
+//         $updateHitCount = UserSchemeMaster::where('user_id', $user->id)->where('api_id', $api_id)->latest()->first();
+//         if (!$updateHitCount && $user->role_id == 1) {
+//             Log::warning('User not registered for bank analyser service', ['user_id' => $user->id]);
+//             return redirect()->back()->with('error', 'You are not registered to use this service. Please update your plan.');
+//         }
+
+//         // Check wallet balance for non-admin and non-postpaid users
+//         if ($user->role_id == 1 && $user->type !== 'role_postpaid' && $user->wallet_amount <= 0) {
+//             Log::warning('Insufficient wallet balance', ['user_id' => $user->id, 'wallet_amount' => $user->wallet_amount]);
+//             return redirect()->back()->with('error', 'Please recharge your wallet.');
+//         }
+
+//         // Validate input
+//         $request->validate([
+//             'file' => 'required|file|mimes:pdf|max:10240',
+//             'country' => 'required|string'
+//         ], [], ['file' => 'PDF file']);
+
+//         Log::info('Input validation passed', ['file' => $request->file('file')?->getClientOriginalName(), 'country' => $request->country]);
+
+//         if (strtoupper($request->country) !== 'INDIA') {
+//             Log::warning('Invalid country code provided', ['country' => $request->country]);
+//             return redirect()->back()->with('error', 'Please enter correct country code (INDIA).');
+//         }
+
+//         $accessToken = $user->access_token;
+//         $file = $request->file('file');
+
+//         Log::info('Preparing to upload file', [
+//             'file_name' => $file->getClientOriginalName(),
+//             'file_size' => $file->getSize(),
+//             'access_token' => $accessToken
+//         ]);
+
+//         try {
+//             $uploadResponse = Http::attach(
+//                 'file',
+//                 file_get_contents($file->getRealPath()),
+//                 $file->getClientOriginalName()
+//             )->post('http://13.232.247.95:8082/api/v1/analysis/analyze', [
+//                 'hint' => ''
+//             ]);
+
+//             if (!$uploadResponse->successful()) {
+//                 Log::error('File upload to analysis API failed', ['status' => $uploadResponse->status(), 'response' => $uploadResponse->body()]);
+//                 if ($user->role_id == 1 && $apiMaster) {
+//                     $this->saveHitCount($user->id, $api_id, 'File upload failed: ' . $uploadResponse->body(), 102);
+
+//                 }
+
+//                 return redirect()->back()->with('error', 'File upload failed: ' . $uploadResponse->body());
+//             }
+
+//             $uploadData = $uploadResponse->json();
+//             $jobId = $uploadData['job_id'] ?? null;
+
+//             if (!$jobId) {
+//                 Log::error('No job_id returned from analysis API', ['response' => $uploadData]);
+//                 if ($user->role_id == 1 && $apiMaster) {
+//                     $this->saveHitCount($user->id, $api_id, 'No job ID returned', 102);
+//                 }
+//                 return redirect()->back()->with('error', 'Analysis failed: No job ID returned.');
+//             }
+
+//             Log::info('File uploaded successfully', [
+//                 'job_id' => $jobId,
+//                 'status' => $uploadData['status'] ?? 'Unknown',
+//                 'status_url' => $uploadData['status_url'] ?? 'N/A'
+//             ]);
+
+//             $maxAttempts = 10;
+//             $attempt = 0;
+//             $delay = 3;
+
+//             do {
+//                 Log::info('Polling for analysis result', ['attempt' => $attempt + 1, 'job_id' => $jobId]);
+//                 sleep($delay);
+//                 $resultResponse = Http::get("http://13.232.247.95:8082/api/v1/analysis/result/{$jobId}");
+//                 $attempt++;
+
+//                 if ($resultResponse->successful()) {
+//                     $data = $resultResponse->json();
+//                     Log::info('Analysis result received', ['job_id' => $jobId]);
+
+//                     // Store analysis result in session for streaming
+//                     session(['pdf_data' => $data]);
+
+//                     // Save hit count for successful transaction
+//                     if ($user->role_id == 1 && $apiMaster) {
+//                         // dd('till')
+//                         $this->saveHitCount($user->id, $api_id, 'Transaction Successful', 200);
+//                     }
+
+//                     Log::info('Redirecting to form with stream URL');
+//                     return redirect()
+//                         ->route('kyc.bank_analyser')
+//                         ->with('stream_pdf', true)
+//                         ->with('statusCode', 200)
+//                         ->with('message', 'Bank statement analyzed successfully.')
+//                         ->with('stream_url', route('kyc.bank_analyser') . '?stream=1');
+//                 }
+
+//                 if ($attempt >= $maxAttempts) {
+//                     Log::error('Result polling timed out', ['job_id' => $jobId, 'attempts' => $attempt]);
+//                     if ($user->role_id == 1 && $apiMaster) {
+//                         $this->saveHitCount($user->id, $api_id, 'Analysis timed out', 102);
+//                     }
+//                     return redirect()->back()->with('error', 'Analysis timed out. Please try again later.');
+//                 }
+//             } while (!$resultResponse->successful());
+
+//         } catch (\Exception $e) {
+//             Log::error('Exception in bank_analyser', [
+//                 'message' => $e->getMessage(),
+//                 'file' => $e->getFile(),
+//                 'line' => $e->getLine()
+//             ]);
+//             if ($user->role_id == 1 && $apiMaster) {
+//                 $this->saveHitCount($user->id, $api_id, 'Server error: ' . $e->getMessage(), 102);
+//         }
+//         return redirect()->back()->with('error', 'Server error: ' . $e->getMessage());
+//     }
+// }
+
+ public function bank_analyser(Request $request)
+    {
+        $hit_limits_exceeded = 0;
+        $statusCode = null;
+
+        Log::info('Starting bank_analyser function', [
+            'method' => $request->method(),
+            'user' => Auth::check() ? Auth::id() : 'Guest',
+            'query' => $request->query()
+        ]);
+
+        // Handle GET request for form
+        if ($request->isMethod('GET')) {
+            return view('kyc.bankanalyser');
+        }
+
+        // Check authentication
+        if (!Auth::check()) {
+            Log::warning('Unauthenticated access attempt');
+            return redirect()->route('login')->with('error', 'Please log in to continue.');
+        }
+
+        $user = Auth::user();
+        Log::info('User authenticated', ['user_id' => $user->id, 'email' => $user->email]);
+
+
+
+
+        // Fetch API ID for bank analyzer
+        $apiMaster = ApiMaster::where('api_slug', 'bank_anlyser')->first();
+        $api_id = $apiMaster ? $apiMaster->id : null;
+
+        // Check if user is registered for the service
+        $updateHitCount = UserSchemeMaster::where('user_id', $user->id)->where('api_id', $api_id)->latest()->first();
+        if (!$updateHitCount && $user->role_id != 0) {
+            Log::warning('User not registered for bank analyser service', ['user_id' => $user->id]);
+            return redirect()->back()->with('error', 'You are not registered to use this service. Please update your plan.');
+        }
+
+        // Check wallet balance for non-admin and non-postpaid users
+        if ($user->role_id == 1 && $user->type !== 'role_postpaid' && $user->wallet_amount <= 0) {
+            Log::warning('Insufficient wallet balance', ['user_id' => $user->id, 'wallet_amount' => $user->wallet_amount]);
+            return redirect()->back()->with('error', 'Please recharge your wallet.');
+        }
+
+        // Validate input
+        $request->validate([
+            'file' => 'required|file|mimes:pdf|max:10240',
+            'country' => 'required|string',
+        ], [], ['file' => 'PDF file']);
+
+        Log::info('Input validation passed', [
+            'file' => $request->file('file')?->getClientOriginalName(),
+            'country' => $request->country
+        ]);
+
+        if (strtoupper($request->country) !== 'INDIA') {
+            Log::warning('Invalid country code provided', ['country' => $request->country]);
+            return redirect()->back()->with('error', 'Please enter correct country code (INDIA).');
+        }
+
+        $accessToken = $user->access_token;
+        $file = $request->file('file');
+
+        Log::info('Preparing to upload file', [
+            'file_name' => $file->getClientOriginalName(),
+            'file_size' => $file->getSize(),
+            'access_token' => $accessToken
+        ]);
+
+$password = trim($request->input('password', ''));
+       $hints = $password !== ''
+    ? json_encode(['password' => $password])
+    : '';
+        // Upload file to analysis API
+        $uploadResponse = Http::attach(
+            'file',
+            file_get_contents($file->getRealPath()),
+            $file->getClientOriginalName()
+        )->post('http://13.204.214.95:8082/api/v1/analysis/analyze', [
+            'hints' => $hints
+        ]);
+
+        if (!$uploadResponse->successful()) {
+            Log::error('File upload to analysis API failed', [
+                'status' => $uploadResponse->status(),
+                'response' => $uploadResponse->body()
+            ]);
+            if ($user->role_id == 1 && $apiMaster) {
+                $this->saveHitCount($user->id, $api_id, 'File upload failed: ' . $uploadResponse->body(), 102);
+            }
+            return redirect()->back()->with('error', 'File upload failed: ' . $uploadResponse->body());
+        }
+
+        $uploadData = $uploadResponse->json();
+        $jobId = $uploadData['job_id'] ?? null;
+
+        if (!$jobId) {
+            Log::error('No job_id returned from analysis API', ['response' => $uploadData]);
+            if ($user->role_id == 1 && $apiMaster) {
+                $this->saveHitCount($user->id, $api_id, 'No job ID returned', 102);
+            }
+            return redirect()->back()->with('error', 'Analysis failed: No job ID returned.');
+        }
+
+        Log::info('File uploaded successfully', [
+            'job_id' => $jobId,
+            'status' => $uploadData['status'] ?? 'Unknown',
+            'status_url' => $uploadData['status_url'] ?? 'N/A'
+        ]);
+
+        // Poll for analysis result
+        $maxAttempts = 20;
+        $attempt = 0;
+        $delay = 3;
+
+     do {
+    Log::info('Polling for analysis result', ['attempt' => $attempt + 1, 'job_id' => $jobId]);
+    sleep($delay);
+    $resultResponse = Http::timeout(120)->get("http://13.204.214.95:8082/api/v1/analysis/result/{$jobId}");
+    $attempt++;
+
+    // If API responded
+    if ($resultResponse->ok()) {
+        $bankstatement = $resultResponse->json();
+
+        // ✅ Check if API returned "detail" key (like incorrect password)
+        if (isset($bankstatement['detail'])) {
+            $errorMsg = $bankstatement['detail'];
+
+            Log::warning('Bank analysis error', [
+                'job_id' => $jobId,
+                'error' => $errorMsg
+            ]);
+
+            if ($user->role_id == 1 && $apiMaster) {
+                $this->saveHitCount($user->id, $api_id, $errorMsg, 102);
+            }
+
+            return redirect()->back()->with('error', $errorMsg);
+        }
+
+        // ✅ Normal successful processing
+        if (isset($bankstatement['response'])) {
+            Log::info('Analysis result received', ['job_id' => $jobId]);
+
+            if ($user->role_id == 1 && $apiMaster) {
+                $this->saveHitCount($user->id, $api_id, 'Transaction Successful', 200);
+            }
+
+            $statmendata = $bankstatement['response'];
+            $statusCode = $bankstatement['status_code'];
+            $atm_withdrawl = $statmendata['atm_withdrawls'];
+            $averageMonthlyBalance = $statmendata['averageMonthlyBalance'];
+            $expenses = $statmendata['expenses'];
+            $high_value_transactions = $statmendata['high_value_transactions'];
+            $incomes = $statmendata['incomes'];
+            $minimum_balances = $statmendata['minimum_balances'];
+            $money_received_transactions = $statmendata['money_received_transactions'];
+
+            try {
+                $pdf = Pdf::loadView('kyc.analyserpdf', compact(
+                    'atm_withdrawl',
+                    'averageMonthlyBalance',
+                    'expenses',
+                    'high_value_transactions',
+                    'incomes',
+                    'minimum_balances',
+                    'money_received_transactions'
+                ))->setPaper('A4');
+
+                return $pdf->download('bank_statement_analysis.pdf');
+
+            } catch (\Exception $e) {
+                if ($user->role_id == 1 && $apiMaster) {
+                    $this->saveHitCount($user->id, $api_id, 'PDF generation failed: ' . $e->getMessage(), 102);
+                }
+                return redirect()->back()->with('error', 'Failed to generate PDF: ' . $e->getMessage());
+            }
+        }
+    }
+        // If API returned a non-success status
+        elseif ($resultResponse->status() >= 400) {
+            $errorMsg = $resultResponse->json()['detail'] ?? 'Unexpected error occurred.';
+            Log::error('Bank analysis API error', ['status' => $resultResponse->status(), 'error' => $errorMsg]);
+            return redirect()->back()->with('error', $errorMsg);
+        }
+
+        if ($attempt >= $maxAttempts) {
+            if ($user->role_id == 1 && $apiMaster) {
+                $this->saveHitCount($user->id, $api_id, 'Analysis timed out', 102);
+            }
+            return redirect()->back()->with('error', 'Analysis timed out. Please try again later.');
+        }
+
+    } while (true);
+
+        // Fallback in case of unexpected loop exit
+        Log::error('Unexpected loop exit in polling', ['job_id' => $jobId]);
+        return redirect()->back()->with('error', 'Analysis failed due to unexpected error.');
+    }
+
+
+    
+
+
+
+    public function bank_analyser08_08_2025(Request $request)
     {
         $statusCode = null;
         $bank_verification = null;
@@ -2614,6 +3351,16 @@ class KycController extends Controller
                 }
             }
         }
+
+            if($corporate_gstin[0]['corporate_gstin']['code'] == 200){
+                $pdf = Pdf::loadView('kyc.corporategstin_pdf', [
+                'corporate_gstin' => $corporate_gstin
+                ]);
+                return $pdf->download('corporategstin_pdf.pdf');
+
+            }
+            
+
         return view('kyc.corporate_gstin', compact('corporate_gstin', 'statusCode', 'hit_limits_exceeded'));
     }
 
@@ -4080,6 +4827,100 @@ class KycController extends Controller
 
     public function fssi_verification(Request $request)
     {
+        $statusCode = null;
+        $fssi_validation = null;
+        $hit_limits_exceeded = 0;
+
+        if ($request->isMethod('GET')) {
+
+            return view('kyc.fssi_validation', compact('fssi_validation', 'statusCode', 'hit_limits_exceeded'));
+        }
+        // dd('dddd');
+
+        if ($request->isMethod('POST')) {
+            // $data="22819015001312";
+            $client = new Client();
+
+            $user_id = Auth()->user()->id;
+            $user = User::where('id', $user_id)->first();
+            $accessToken = $user->access_token;
+            $headers = [
+                'AccessToken' => $accessToken
+            ];
+        $client_ref_num = strval(rand(100, 999));
+            $body = [
+                'license_number' => $request->license_number,
+                'client_ref_num'=> $client_ref_num
+            ];
+            // dd($request->fssi_number);
+
+            if (Auth::user()->scheme_type != 'demo') {
+                if (Auth::user()->role_id == 1) {
+                    $apiamster = ApiMaster::where('api_slug', 'fssi')->first();
+                    if ($apiamster)
+                        $api_id = $apiamster->id;
+                }
+                // dd($request->fssi_number);
+                try {
+                    $res = $client->post('http://regtechapi.in/api/fssi', ['headers' => $headers, 'json' => $body]);
+                    $fssi_validation = json_decode($res->getBody(), true);
+                    // dd($fssi_validation);
+                    // if(Auth::user()->role_id==1) {
+                    //     if($apiamster) {
+                    //         $updateHitCount = SchemeMaster::where('user_id',Auth()->user()->id)->where('api_id',$api_id)->first();
+                    //         $addHitCount = new HitCountMaster;
+                    //         $addHitCount->user_id = Auth()->user()->id;
+                    //         $addHitCount->api_id = $api_id;
+                    //         $addHitCount->scheme_price = $updateHitCount->scheme_price;
+                    //         $addHitCount->hit_year_month = date('Y-m');
+                    //         $addHitCount->hit_count = 1;
+                    //         $addHitCount->save();
+
+
+                    //         $remark = 'FSSAI validation Debited '.$updateHitCount->scheme_price.' Sucessfull';
+                    //         $this->update_transaction($api_id, $updateHitCount->scheme_price, $remark);
+                    //         $this->update_wallet_balance($updateHitCount->scheme_price);
+
+
+
+
+                    //     }
+                    // dd( $fssi_validation);
+                    // }
+                } catch (BadResponseException $e) {
+                    // dd( $fssi_validation);
+                    $statusCode = $e->getResponse()->getStatusCode();
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in. for more details';
+                    return view('kyc.fssi_validation', compact('statusCode', 'errorMessage'));
+                }
+            } else {
+                $scheme_type = SchemeTypeMaster::where('id', Auth::user()->scheme_type_id)->first();
+                $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+                if ($hit_count_remaining > 0) {
+                    try {
+                        $res = $client->post('http://regtechapi.in/api/fssi', ['headers' => $headers, 'json' => $body]);
+                        $fssi_validation = json_decode($res->getBody(), true);
+                        $user = User::where('id', Auth::user()->id)->first();
+                        $user->scheme_hit_count = $user->scheme_hit_count + 1;
+                        $user->save();
+                    } catch (BadResponseException $e) {
+                        $statusCode = $e->getResponse()->getStatusCode();
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in. for more details';
+                        return view('kyc.fssi_validation', compact('statusCode', 'errorMessage'));
+                    }
+                } else {
+                    $hit_limits_exceeded = 1;
+
+                    return view('kyc.fssi_validation', compact('fssi_validation', 'statusCode', 'hit_limits_exceeded'));
+                }
+            }
+        }
+        // dd( $fssi_validation);
+        return view('kyc.fssi_validation', compact('fssi_validation', 'statusCode', 'hit_limits_exceeded'));
+    }
+    
+    public function fssi_verification22agust2025(Request $request)
+    {
 
 
         $statusCode = null;
@@ -4514,7 +5355,88 @@ class KycController extends Controller
         return view('kyc.fasttag_information', compact('fasttag_information', 'statusCode'));
     }
 
-    public function upi_validation(Request $request)
+    
+     public function upi_validation(Request $request)
+    {
+        $statusCode = null;
+        $upidetails = null;
+        $hit_limits_exceeded = 0;
+        $low_wallet_balance = 0;
+
+        if ($request->isMethod('GET')) {
+            return view('kyc.upi_validation', compact('upidetails', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+        }
+        if ($request->isMethod('POST')) {
+            $client = new Client();
+
+            $accessToken = Auth::user()->access_token;
+
+            $headers = [
+                'AccessToken' => $accessToken,
+            ];
+            $body = [
+                'name' => $request->name,
+                'upi_id' => $request->upi_id,
+                'order_id' => $request->order_id,
+            ];
+            if (Auth::user()->scheme_type != 'demo') {
+                if (Auth::user()->role_id == 1) {
+                    $apiamster = ApiMaster::where('api_slug', 'upi')->first();
+                    if ($apiamster)
+                        $api_id = $apiamster->id;
+                }
+                // if(Auth()->user()->wallet_amount >= $updateHitCount->scheme_price){
+                try {//dd($body);
+                    $res = $client->post('http://regtechapi.in/api/upi_validation', ['headers' => $headers, 'json' => $body]);
+
+                    $upidetails = json_decode($res->getBody(), true);
+                    if (isset($upidetails[0]['upidetails']['code'])) {
+                        $statusCode = $upidetails[0]['upidetails']['code'];
+                    }
+                } catch (BadResponseException $e) {
+                    $statusCode = $e->getResponse()->getStatusCode();
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in. for more details';
+                    } else if ($statusCode == 422) {
+                        $errorMessage = 'Verification Failed. Please enter correct UPI Id.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in. for more details';
+                    }
+                    return view('kyc.pancard', compact('statusCode', 'errorMessage'));
+                }
+            } else {
+                $scheme_type = SchemeTypeMaster::where('id', Auth::user()->scheme_type_id)->first();
+                $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+                if ($hit_count_remaining > 0) {
+                    try {
+                        $res = $client->post('http://regtechapi.in/api/upi_validation', ['headers' => $headers, 'json' => $body]);
+                        $upidetails = json_decode($res->getBody(), true);
+                        $user = User::where('id', Auth::user()->id)->first();
+                        $user->scheme_hit_count = $user->scheme_hit_count + 1;
+                        $user->save();
+                    } catch (BadResponseException $e) {
+                        $statusCode = $e->getResponse()->getStatusCode();
+                        if ($statusCode == 500) {
+                            $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in. for more details';
+                        } else if ($statusCode == 422) {
+                            $errorMessage = 'Verification Failed. Please enter correct PAN Number.';
+                        } else {
+                            $errorMessage = 'Error. Please contact techsupport@docboyz.in. for more details';
+                        }
+                        return view('kyc.upi_validation', compact('statusCode', 'errorMessage'));
+                    }
+                } else {
+                    $hit_limits_exceeded = 1;
+
+                    return view('kyc.upi_validation', compact('upidetails', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+                }
+            }
+        }
+        return view('kyc.upi_validation', compact('upidetails', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+    }
+
+    
+    public function upi_validation18agust2025(Request $request)
     {
         $statusCode = null;
         $upidetails = null;
@@ -4787,13 +5709,23 @@ class KycController extends Controller
                         return view('kyc.udyamdetails', compact('statusCode', 'errorMessage'));
                     }
                 } else {
+                    return 'ok';
                     $hit_limits_exceeded = 1;
+                    
+
 
                     return view('kyc.udyamdetails', compact('udyamcard', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
                 }
             }
         }
-
+        //  return ' not ok';
+        if($udyamcard['status_code'] == 200){
+              $pdf = Pdf::loadView('kyc.udyamdetails_pdf', [
+                'udyamcard' => $udyamcard
+            ]);
+          return $pdf->download('udyamdetails.pdf');
+        }
+          
         return view('kyc.udyamdetails', compact('udyamcard', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
     }
 
@@ -5047,6 +5979,98 @@ class KycController extends Controller
                     return view('kyc.pandetails_info_new', compact('pancardError', 'pancard', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
                 }
             }
+        }
+    }
+
+    public function script_tracing(Request $request)
+    {
+        // return 'ok1';
+        $statusCode = null;
+        $pancard = null;
+        $pandetailsinfo = null;
+        $pancardError = null;
+        $hit_limits_exceeded = 0;
+        $low_wallet_balance = 0;
+
+        if ($request->isMethod('GET')) {
+            return view('kyc.script_tracing', compact('pancard', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+        }
+        if ($request->isMethod('POST')) {
+            $client = new Client();
+            $accessToken = Auth::user()->access_token;
+
+            $headers = [
+                'AccessToken' => $accessToken,
+            ];
+            $body = [
+                'fname' => $request->fname,
+                'lname' => $request->lname,
+                'dob' => $request->dob,
+                'pan_num' => $request->pan_num,
+                'phone_number' => $request->phone_number,
+            ];
+        
+                // return 'yusys';
+                if (Auth::user()->role_id == 1) {
+                    $apiamster = ApiMaster::where('api_slug', 'pandetails1')->first();
+                    if ($apiamster) {
+                        $api_id = $apiamster->id;
+                    }
+                }
+                // try {
+                    $response = $client->post('http://regtechapi.in/api/script_tracing', ['headers' => $headers, 'json' => $body]);
+                    $pancard = json_decode($response->getBody(), true);
+                    // return $pancard['statusCode'];
+                    // $api_master = ApiMaster::where('api_slug', 'pandetails1')->first();
+                    // $pancard_details = UserSchemeMaster::where('user_id', Auth::user()->id)
+                    //     ->where('api_id', $api_master->id)
+                    //     ->pluck('permission');
+                    // return $pancard_details;
+                    // $pandetails_data = explode(',', $pancard_details[0]);
+                    // if (count($pancard_details) > 0) {
+                    //     $pandetails_data = explode(',', $pancard_details[0]);
+                    // }
+                    //  dd($pandetails_data);
+                    if ($pancard['statusCode'] == 200 || $pancard['statusCode'] == 2000) {
+                    //    return 'test';
+                            $pancard['data'] = null;
+                            $statusCode = $pancard['statusCode'];
+                            $errorMessage = 'Success';
+                            $pandetailsinfo['data'] = $pancard['script_tracing'];
+                            return view('kyc.script_tracing', compact('pandetailsinfo', 'statusCode', 'errorMessage'));
+                      
+                    } elseif ($pancard['statusCode'] == 102 && $pancard['message'] == 'No Records found!.') {
+                            // return 'test2';
+                        $statusCode = $pancard['statusCode'];
+                        $errorMessage = 'No Records Found !';
+                        return view('kyc.script_tracing', compact('pancard', 'statusCode', 'errorMessage'));
+
+                    } elseif ($pancard['statusCode'] == 102 && $pancard['message'] == 'PAN Number InValid Please Enter Correct PanNumber.') {
+                            // return 'test3';
+                        $statusCode = $pancard['statusCode'];
+                        $errorMessage = 'PAN Number InValid Please Enter Correct PanNumber.';
+                        return view('kyc.script_tracing', compact('pancard', 'statusCode', 'errorMessage'));
+                    } else {
+                            // return 'test4';
+                        $statusCode = 500;
+                        $errorMessage = 'Internal Server Error.';
+                        return view('kyc.script_tracing', compact('statusCode', 'errorMessage'));
+                    }
+                // } catch (BadResponseException $e) {
+                //     $response = $e->getResponse();
+                //     $pancardError = json_decode($response->getBody(), true);
+                //     $statusCode = $e->getResponse()->getStatusCode();
+                //     if (isset($pancardError['statusCode']) && $pancardError['statusCode'] == 102) {
+                //         $statusCode = 102;
+                //         $errorMessage = 'PAN Number InValid Please Enter Correct PanNumber.';
+                //         return view('kyc.pandetails_info_new', compact('pancardError', 'statusCode', 'errorMessage'));
+                //     } else {
+                //         $statusCode = 500;
+                //         $errorMessage = 'Internal Server Error.';
+                //         return view('kyc.pandetails_info_new', compact('pancardError', 'statusCode', 'errorMessage'));
+                //     }
+                // }
+            
         }
     }
 
@@ -5335,7 +6359,7 @@ class KycController extends Controller
     {
         return view('kyc.ckycsearch_advance_api');
     }
-    public function ckycSearchAdvance(Request $request)
+    public function ckycSearchAdvance11agust2025(Request $request)
     {
         $statusCode = null;
         $searchkyc = null;
@@ -9628,6 +10652,7 @@ class KycController extends Controller
     }
     public function pantogst(Request $request)
     {
+       
         $statusCode = null;
         $hit_limits_exceeded = 0;
         $low_wallet_balance = 0;
@@ -9638,6 +10663,7 @@ class KycController extends Controller
         if ($request->isMethod('POST')) {
             $accessToken = Auth::user()->access_token;
             if (Auth::user()->scheme_type != 'demo') {
+                
                 if (Auth::user()->role_id == 1) {
                     $apiamster = ApiMaster::where('api_slug', 'pantogst')->first();
                     if ($apiamster) {
@@ -9661,6 +10687,7 @@ class KycController extends Controller
                 ]);
                 $result = curl_exec($curl);
                 $pantogstDetails = json_decode($result, true);
+                // return $pantogstDetails;
                 if (isset($pantogstDetails['status_code']) && $pantogstDetails['status_code'] == 200) {
                     return view('kyc.pantogst', compact('pantogstDetails'));
                 } elseif (isset($pantogstDetails['statusCode']) && $pantogstDetails['statusCode'] == 102) {
@@ -12001,6 +13028,10445 @@ class KycController extends Controller
             dd($request->all());
         }
     }
+
+     public function ckycSearchAdvance(Request $request)
+    {
+        $statusCode = null;
+        $searchkyc = null;
+        $hit_limits_exceeded = 0;
+        $low_wallet_balance = 0;
+        $mobile = $request->mobile;
+        if ($request->isMethod('GET')) {
+            return view('kyc.ckycsearch_advance', compact('searchkyc', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+        }
+        if ($request->isMethod('POST')) {
+
+            $accessToken = Auth::user()->access_token;
+            $headers = [
+                'AccessToken' => $accessToken,
+            ];
+            $pano = $request->pan_number;
+            // $mobile = $request->mobile;
+            $client_ref_num = rand(10000, 99999);
+            if (Auth::user()->scheme_type != 'demo') {
+                // return 'demo';
+                if (Auth::user()->role_id == 1) {
+                    $apiamster = ApiMaster::where('api_slug', 'ckycdownload')->first();
+                    if ($apiamster) {
+                        $api_id = $apiamster->id;
+                    }
+                }
+                $accessToken = Auth::user()->access_token;
+                $curl1 = curl_init();
+                curl_setopt_array($curl1, [
+                    CURLOPT_URL => 'http://regtechapi.in/api/ckyc_searchadvance',
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_ENCODING => '',
+                    CURLOPT_MAXREDIRS => 10,
+                    CURLOPT_TIMEOUT => 0,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                    CURLOPT_CUSTOMREQUEST => 'POST',
+                    CURLOPT_POSTFIELDS => [
+                        'pano' => $pano,
+                        'client_ref_num' => $client_ref_num,
+                        'mobile' => '9090909090',
+                        'identifier_type' => 'PAN'
+                    ],
+                    CURLOPT_HTTPHEADER => ['AccessToken: ' . $accessToken],
+                ]);
+
+                // $get_data1 = curl_exec($curl1);
+                $result = curl_exec($curl1);
+                $searchkyc = json_decode($result, true);
+                if (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 200 && $searchkyc['response']['status'] == "VALID") {
+                    $statusCode = 200;
+                    $pdf = Pdf::loadView('kyc.ckyc_advance_pdf', [
+                                         'searchkyc' => $searchkyc
+                                        ]);
+                    return $pdf->download('ckyc_advance_pdf.pdf');
+                    return view('kyc.ckycsearch_advance', compact('statusCode', 'searchkyc'));
+                } elseif (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 102) {
+                    $statusCode = 102;
+                    return view('kyc.ckycsearch_advance', compact('statusCode'));
+                } elseif (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 103) {
+                    $statusCode = 103;
+                    return view('kyc.ckycsearch_advance', compact('statusCode'));
+                } else {
+                    $statusCode = 500;
+                    return view('kyc.ckycsearch_advance', compact('statusCode'));
+                }
+            } else {
+                $scheme_type = SchemeTypeMaster::where('id', Auth::user()->scheme_type_id)->first();
+                $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+                if ($hit_count_remaining > 0) {
+                    $accessToken = Auth::user()->access_token;
+                    $curl1 = curl_init();
+                    curl_setopt_array($curl1, [
+                        CURLOPT_URL => 'http://regtechapi.in/api/ckyc_searchadvance',
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_ENCODING => '',
+                        CURLOPT_MAXREDIRS => 10,
+                        CURLOPT_TIMEOUT => 0,
+                        CURLOPT_FOLLOWLOCATION => true,
+                        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                        CURLOPT_CUSTOMREQUEST => 'POST',
+                        CURLOPT_POSTFIELDS => [
+                            'pano' => $pano,
+                            'client_ref_num' => $client_ref_num,
+                            'mobile' => $mobile,
+                            'identifier_type' => 'PAN'
+                        ],
+                        CURLOPT_HTTPHEADER => ['AccessToken: ' . $accessToken],
+                    ]);
+                    // $get_data1 = curl_exec($curl1);
+                    $result = curl_exec($curl1);
+                    $searchkyc = json_decode($result, true);
+
+                    if (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 200 && $searchkyc['response']['status'] == "VALID") {
+                                        $pdf = Pdf::loadView('kyc.ckyc_advance_pdf', [
+                                         'searchkyc' => $searchkyc
+                                        ]);
+                                    return $pdf->download('ckyc_advance_pdf.pdf');
+                        $statusCode = 200;
+                        return view('kyc.ckycsearch_advance', compact('statusCode', 'searchkyc', 'hit_limits_exceeded', 'low_wallet_balance'));
+                    } elseif (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 102) {
+                        $statusCode = 102;
+                        return view('kyc.ckycsearch_advance', compact('statusCode'));
+                    } elseif (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 103) {
+                        $statusCode = 103;
+                        return view('kyc.ckycsearch_advance', compact('statusCode'));
+                    } else {
+                        $statusCode = 500;
+                        return view('kyc.ckycsearch_advance', compact('statusCode'));
+                    }
+                } else {
+                    $hit_limits_exceeded = 1;
+
+                    return view('kyc.ckycsearch_advance', compact('searchkyc', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+                }
+            }
+        }
+        if($searchkyc['response']['status'] == 'VALID' ){
+                $pdf = Pdf::loadView('kyc.ckyc_advance_pdf', [
+                'searchkyc' => $searchkyc
+            ]);
+           return $pdf->download('ckyc_advance_pdf.pdf');
+        }
+
+        return view('kyc.ckycsearch_advance', compact('searchkyc', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+    }
+    
+
+    public function enquieryform(Request $request)
+    {
+        // Assuming you have aadhaar_validation data in DB/session/API call
+       return view('enquiery.html');
+    }
+
+   
+
+    public function downloadPdf($client_id)
+    {
+        // Assuming you have aadhaar_validation data in DB/session/API call
+        $aadhaar_validation = $client_id;
+
+        if(!$aadhaar_validation || $aadhaar_validation['status'] != 200){
+            return redirect()->back()->with('error', 'No Aadhaar details found!');
+        }
+
+        $pdf = Pdf::loadView('aadhaar_pdf', compact('aadhaar_validation'));
+        return $pdf->download(' -'.$client_id.'.pdf');
+    }
+
+    public function ckycSearchAdvance_production(Request $request)
+    {
+        $statusCode = null;
+        $searchkyc = null;
+        $hit_limits_exceeded = 0;
+        $low_wallet_balance = 0;
+        $mobile = $request->mobile;
+        if ($request->isMethod('GET')) {
+            return view('kyc.ckycproduction', compact('searchkyc', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+        }
+        if ($request->isMethod('POST')) {
+
+            $accessToken = Auth::user()->access_token;
+            $headers = [
+                'AccessToken' => $accessToken,
+            ];
+            $pano = $request->pan_number;
+            // $mobile = $request->mobile;
+            $client_ref_num = rand(10000, 99999);
+            if (Auth::user()->scheme_type != 'demo') {
+                // return 'demo';
+                if (Auth::user()->role_id == 1) {
+                    $apiamster = ApiMaster::where('api_slug', 'ckycdownload')->first();
+                    if ($apiamster) {
+                        $api_id = $apiamster->id;
+                    }
+                }
+                $accessToken = Auth::user()->access_token;
+                $curl1 = curl_init();
+                curl_setopt_array($curl1, [
+                    CURLOPT_URL => 'http://regtechapi.in/api/ckyc_sendotp',
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_ENCODING => '',
+                    CURLOPT_MAXREDIRS => 10,
+                    CURLOPT_TIMEOUT => 0,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                    CURLOPT_CUSTOMREQUEST => 'POST',
+                    CURLOPT_POSTFIELDS => [
+                        'pano' => $pano,
+                        'client_ref_num' => $client_ref_num,
+                        'mobile' => '9090909090',
+                        'identifier_type' => 'PAN'
+                    ],
+                    CURLOPT_HTTPHEADER => ['AccessToken: ' . $accessToken],
+                ]);
+
+                // $get_data1 = curl_exec($curl1);
+                $result = curl_exec($curl1);
+                $searchkyc = json_decode($result, true);
+                if (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 200 && $searchkyc['response']['status'] == "VALID") {
+                    $statusCode = 200;
+                    $pdf = Pdf::loadView('kyc.ckyc_advance_pdf', [
+                                         'searchkyc' => $searchkyc
+                                        ]);
+                    return $pdf->download('ckyc_advance_pdf.pdf');
+                    return view('kyc.ckycproduction', compact('statusCode', 'searchkyc'));
+                } elseif (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 102) {
+                    $statusCode = 102;
+                    return view('kyc.ckycproduction', compact('statusCode'));
+                } elseif (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 103) {
+                    $statusCode = 103;
+                    return view('kyc.ckycproduction', compact('statusCode'));
+                } else {
+                    $statusCode = 500;
+                    return view('kyc.ckycproduction', compact('statusCode'));
+                }
+            } else {
+                $scheme_type = SchemeTypeMaster::where('id', Auth::user()->scheme_type_id)->first();
+                $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+                if ($hit_count_remaining > 0) {
+                    $accessToken = Auth::user()->access_token;
+                    $curl1 = curl_init();
+                    curl_setopt_array($curl1, [
+                        CURLOPT_URL => 'http://regtechapi.in/api/ckyc_sendotp',
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_ENCODING => '',
+                        CURLOPT_MAXREDIRS => 10,
+                        CURLOPT_TIMEOUT => 0,
+                        CURLOPT_FOLLOWLOCATION => true,
+                        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                        CURLOPT_CUSTOMREQUEST => 'POST',
+                        CURLOPT_POSTFIELDS => [
+                            'pano' => $pano,
+                            'client_ref_num' => $client_ref_num,
+                            'mobile' => $mobile,
+                            'identifier_type' => 'PAN'
+                        ],
+                        CURLOPT_HTTPHEADER => ['AccessToken: ' . $accessToken],
+                    ]);
+                    // $get_data1 = curl_exec($curl1);
+                    $result = curl_exec($curl1);
+                    $searchkyc = json_decode($result, true);
+
+                    if (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 200 && $searchkyc['response']['status'] == "VALID") {
+                                        $pdf = Pdf::loadView('kyc.ckyc_advance_pdf', [
+                                         'searchkyc' => $searchkyc
+                                        ]);
+                                    return $pdf->download('ckyc_advance_pdf.pdf');
+                        $statusCode = 200;
+                        return view('kyc.ckycproduction', compact('statusCode', 'searchkyc', 'hit_limits_exceeded', 'low_wallet_balance'));
+                    } elseif (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 102) {
+                        $statusCode = 102;
+                        return view('kyc.ckycproduction', compact('statusCode'));
+                    } elseif (isset($searchkyc['statusCode']) && $searchkyc['statusCode'] == 103) {
+                        $statusCode = 103;
+                        return view('kyc.ckycproduction', compact('statusCode'));
+                    } else {
+                        $statusCode = 500;
+                        return view('kyc.ckycproduction', compact('statusCode'));
+                    }
+                } else {
+                    $hit_limits_exceeded = 1;
+
+                    return view('kyc.ckycproduction', compact('searchkyc', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+                }
+            }
+        }
+        if($searchkyc['response']['status'] == 'VALID' ){
+                $pdf = Pdf::loadView('kyc.ckyc_advance_pdf', [
+                'searchkyc' => $searchkyc
+            ]);
+           return $pdf->download('ckyc_advance_pdf.pdf');
+        }
+
+        return view('kyc.ckycproduction', compact('searchkyc', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+    }
+
+    public function sendOtp(Request $request)
+{
+    $accessToken = Auth::user()->access_token;
+    $pano = $request->pan_number;
+    $mobile = $request->mobile;
+    $client_ref_num = rand(10000, 99999);
+
+    $curl = curl_init();
+    curl_setopt_array($curl, [
+        CURLOPT_URL => 'http://regtechapi.in/api/ckyc_sendotp',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => [
+            'pano' => $pano,
+            'client_ref_num' => $client_ref_num,
+            'mobile' => $mobile,
+            'identifier_type' => 'PAN'
+        ],
+        CURLOPT_HTTPHEADER => [
+            'AccessToken: ' . $accessToken,
+        ]
+    ]);
+
+    $response = curl_exec($curl);
+    curl_close($curl);
+
+    $result = json_decode($response, true);
+
+    return response()->json([
+        'result_code' => $result['result_code'] ?? 500,
+        'error' => $result['error'] ?? 'Failed',
+        'ckyc_response_request_id' => $result['ckyc_response_request_id'] ?? null,
+        'request_id' => $result['request_id'] ?? null
+    ]);
 }
+
+public function verifyOtp(Request $request)
+{
+    $accessToken = Auth::user()->access_token;
+
+    $curl = curl_init();
+    curl_setopt_array($curl, [
+        CURLOPT_URL => 'http://regtechapi.in/api/ckyc_verifycOtp_prod',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => [
+            'otp' => $request->otp,
+            'ckyc_response_request_id' => $request->ckyc_response_request_id,
+            'request_id' => $request->request_id
+        ],
+        CURLOPT_HTTPHEADER => [
+            'AccessToken: ' . $accessToken
+        ]
+    ]);
+
+    $response = curl_exec($curl);
+    curl_close($curl);
+
+    $result = json_decode($response, true);
+    // return $request->otp;
+    // return $result;
+    if ($result['statusCode'] == 200) {
+        $pdf = \PDF::loadView('kyc.ckycprodpdf', [
+            'searchkyc' => $result
+        ]);
+        return $pdf->download('ckycprodpdf.pdf');
+    } else {
+        return response()->json(['error' => 'OTP verification failed'], 422);
+    }
+}
+
+
+public function udyam_advanced_ui(Request $request)
+{
+    $statusCode = null;
+    $udyamData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ---------- GET ----------
+    if ($request->isMethod('GET')) {
+        return view('kyc.udyam_info', compact(
+            'udyamData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ---------- POST ----------
+    if ($request->isMethod('POST')) {
+
+// if (true) {
+
+//     $udyamData = [
+//         "http_response_code" => 200,
+//         "result_code" => 101,
+//         "message" => "Udyam Found",
+//         "result" => [
+//             "udyam_reg_no" => $request->udyam_reg_no,
+//             "date_of_reg"  => "01/01/2020",
+//             "gender"       => "Male",
+//             "dob"          => "01/01/1985",
+//             "udyam_category" => "Micro",
+//             "district_industries_center" => "Mumbai",
+//             "profile" => [
+//                 "enterprise_name" => "ABC ENTERPRISES",
+//                 "enterprise_type" => "Manufacturing"
+//             ],
+//             "official_address" => [
+//                 "state" => "Maharashtra",
+//                 "district" => "Mumbai",
+//                 "pincode" => "400001"
+//             ]
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.udyam_info', compact(
+//         'udyamData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+
+        $request->validate([
+            'udyam_reg_no' => [
+                'required',
+                'regex:/^(UDYAM-[A-Z]{2}-\d{2}-\d{7})$/'
+            ]
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'udyam_reg_no' => $request->udyam_reg_no
+        ];
+
+        // ---------- NON-DEMO ----------
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'udyambasic')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/udyam_authentication',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $udyamData = json_decode($res->getBody(), true);
+                $statusCode = $udyamData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Udyam verification failed. Please enter a valid Udyam number.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.udyam_info', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+
+        }
+        // ---------- DEMO ----------
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/udyam_authentication',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $udyamData = json_decode($res->getBody(), true);
+                    $statusCode = $udyamData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Udyam verification failed. Please enter a valid Udyam number.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.udyam_info', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.udyam_info', compact(
+                    'udyamData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.udyam_info', compact(
+            'udyamData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+
+ public function mobilenamelookup(Request $request)
+{
+    $statusCode = null;
+    $mobilenum = null;
+    $api_id = null;
+    $errorMessage = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    /* =====================
+       GET REQUEST (UI)
+    ====================== */
+    if ($request->isMethod('GET')) {
+        return view('kyc.mobilename_info', compact(
+            'mobilenum',
+            'statusCode',
+            'errorMessage',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    /* =====================
+       POST REQUEST
+    ====================== */
+    if ($request->isMethod('POST')) {
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile' => $request->mobile
+        ];
+
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'mobilename')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+                $res = $client->post(
+                    'http://regtechapi.in/api/mobile-name-lookup',
+                    ['headers' => $headers, 'json' => $body]
+                );
+
+                $mobilenum = json_decode($res->getBody(), true);
+                $statusCode = $mobilenum['statusCode'] ?? 200;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Verification Failed. Please enter correct mobile number.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.mobilename_info', compact(
+                    'mobilenum',
+                    'statusCode',
+                    'errorMessage',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+
+        } else {
+
+            $scheme_type = SchemeTypeMaster::where('id', Auth::user()->scheme_type_id)->first();
+            $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+                    $res = $client->post(
+                        'http://regtech.in/api/mobile-name-lookup',
+                        ['headers' => $headers, 'json' => $body]
+                    );
+
+                    $mobilenum = json_decode($res->getBody(), true);
+                    $statusCode = $mobilenum['statusCode'] ?? 200;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Verification Failed. Please enter correct mobile number.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+            }
+        }
+    }
+
+    return view('kyc.mobilename_info', compact(
+        'mobilenum',
+        'statusCode',
+        'errorMessage',
+        'hit_limits_exceeded',
+        'low_wallet_balance'
+    ));
+}
+
+
+public function email_otp(Request $request)
+{
+    $statusCode = null;
+    $message = null;
+    $errorMessage = null;
+    $showOtp = false;
+    $email = null;
+
+    // ---------- GET ----------
+    if ($request->isMethod('GET')) {
+        return view('kyc.email_otp', compact(
+            'statusCode',
+            'message',
+            'errorMessage',
+            'showOtp',
+            'email'
+        ));
+    }
+
+    // ---------- POST ----------
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'email' => 'required|email'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        try {
+
+           
+            $res = $client->post(
+                'https://collectkart.docboyz.in/api/send-email-otp',
+                [
+                    'headers' => $headers,
+                    'json'    => [
+                        'email' => $request->email
+                    ]
+                ]
+            );
+
+            $apiResponse = json_decode($res->getBody(), true);
+            $statusCode  = $apiResponse['statusCode'] ?? $res->getStatusCode();
+            $message     = $apiResponse['message'] ?? 'OTP sent successfully';
+            $showOtp     = true;
+            $email       = $request->email;
+
+        } catch (BadResponseException $e) {
+
+            $statusCode = $e->getResponse()->getStatusCode();
+
+            // ---------- SAME ERROR HANDLING AS GSTIN ----------
+            if ($statusCode == 500) {
+                $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+            } elseif ($statusCode == 422) {
+                $errorMessage = 'Email verification failed. Please enter a valid email.';
+            } else {
+                $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+            }
+
+            return view('kyc.email_otp', compact(
+                'statusCode',
+                'errorMessage',
+                'showOtp',
+                'email'
+            ));
+        }
+
+        return view('kyc.email_otp', compact(
+            'statusCode',
+            'message',
+            'showOtp',
+            'email'
+        ));
+    }
+}
+
+
+public function verify_email_otp(Request $request)
+{
+    $statusCode = null;
+    $message = null;
+    $errorMessage = null;
+    $showOtp = true;
+    $email = $request->email;
+
+    // ---------- POST ----------
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'email' => 'required|email',
+            'otp'   => 'required|digits:6'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        try {
+
+            $res = $client->post(
+                'https://collectkart.docboyz.in/api/verify-email-otp',
+                [
+                    'headers' => $headers,
+                    'json'    => [
+                        'email' => $request->email,
+                        'otp'   => $request->otp
+                    ]
+                ]
+            );
+
+            $apiResponse = json_decode($res->getBody(), true);
+            $statusCode  = $apiResponse['statusCode'] ?? $res->getStatusCode();
+            $message     = $apiResponse['message'] ?? 'Email verified successfully';
+            $showOtp     = false;
+
+        } catch (BadResponseException $e) {
+
+            $statusCode = $e->getResponse()->getStatusCode();
+
+         
+            if ($statusCode == 400) {
+                $errorMessage = 'Invalid OTP. Please enter the correct OTP.';
+            } elseif ($statusCode == 404) {
+                $errorMessage = 'OTP not found. Please resend OTP.';
+            } elseif ($statusCode == 500) {
+                $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+            } else {
+                $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+            }
+
+            return view('kyc.email_otp', compact(
+                'statusCode',
+                'errorMessage',
+                'showOtp',
+                'email'
+            ));
+        }
+
+        return view('kyc.email_otp', compact(
+            'statusCode',
+            'message',
+            'showOtp',
+            'email'
+        ));
+    }
+}
+
+
+   
+public function mobile_validation(Request $request)
+    {
+
+        $statusCode = null;
+        $email = null;
+        $hit_limits_exceeded = 0;
+        $low_wallet_balance = 0;
+
+        if ($request->isMethod('GET')) {
+            return view('kyc.mobile_info', compact('mobile', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+        }
+
+        if ($request->isMethod('POST')) {
+            $client = new Client();
+            $accessToken = Auth::user()->access_token;
+
+            $headers = [
+                'AccessToken' => $accessToken,
+            ];
+            $body = [
+                'mobile' => $request->mobile_no
+            ];
+            if (Auth::user()->scheme_type != 'demo') {
+                // return 't11';
+                if (Auth::user()->role_id == 1) {
+                    $apiamster = ApiMaster::where('api_slug', 'mobile')->first();
+                    if ($apiamster)
+                        $api_id = $apiamster->id;
+                }
+                try {
+                    $res = $client->post('http://regtechapi.in/api/mobile-validation', ['headers' => $headers, 'json' => $body]);
+
+                    $mobile= json_decode($res->getBody(), true);
+                    // return $pancard;
+                    if (isset($mobile[0]['mobile']['code'])) {
+                        $statusCode = $mobile[0]['mobile']['code'];
+                    }
+                } catch (BadResponseException $e) {
+                    $statusCode = $e->getResponse()->getStatusCode();
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in. for more details';
+                    } else if ($statusCode == 422) {
+                        $errorMessage = 'Verification Failed. Please enter correct Mobile Number.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in. for more details';
+                    }
+                    return view('kyc.mobile_info', compact('statusCode', 'errorMessage'));
+                }
+            } else {
+                //    return 't2';
+                $scheme_type = SchemeTypeMaster::where('id', Auth::user()->scheme_type_id)->first();
+                $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+                if ($hit_count_remaining > 0) {
+
+                    try {
+                        $res = $client->post('http://regtechapi.in/api/mobile-validation', ['headers' => $headers, 'json' => $body]);
+                        $mobile = json_decode($res->getBody(), true);
+                        $user = User::where('id', Auth::user()->id)->first();
+                        $user->scheme_hit_count = $user->scheme_hit_count + 1;
+                        $user->save();
+                    } catch (BadResponseException $e) {
+                        $statusCode = $e->getResponse()->getStatusCode();
+                        if ($statusCode == 500) {
+                            $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in. for more details';
+                        } else if ($statusCode == 422) {
+                            $errorMessage = 'Verification Failed. Please enter correct Mobile Number.';
+                        } else {
+                            $errorMessage = 'Error. Please contact techsupport@docboyz.in. for more details';
+                        }
+                        return view('kyc.mobile_info', compact('statusCode', 'errorMessage'));
+                    }
+                } else {
+                    $hit_limits_exceeded = 1;
+                    return view('kyc.mobile_info', compact('mobile', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+                }
+            }
+        }
+        return view('kyc.mobile_info', compact('mobile', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance'));
+    }
+   public function pandetails(Request $request)
+{
+    $statusCode = null;
+    $panData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ---------- GET ----------
+    if ($request->isMethod('GET')) {
+        return view('kyc.pandetailss', compact(
+            'panData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ---------- POST ----------
+    if ($request->isMethod('POST')) {
+// ================= MOCK MODE (FOR TESTING UI) =================
+// if (true) {
+
+//     $panData = [
+//         "http_response_code" => 200,
+//         "result_code" => 101,
+//         "request_id" => "mock-request-id",
+//         "client_ref_num" => "test",
+//         "result" => [
+//             "pan" => strtoupper($request->pan),
+//             "pan_type" => "Individual",
+//             "fullname" => "ASHUTOSH SUBHASH DEORE",
+//             "first_name" => "ASHUTOSH",
+//             "middle_name" => "SUBHASH",
+//             "last_name" => "DEORE",
+//             "gender" => "male",
+//             "aadhaar_number" => "XXXXXXXX7659",
+//             "aadhaar_linked" => true,
+//             "dob" => "04/01/2004",
+//             "address" => [
+//                 "building_name" => "",
+//                 "locality" => "",
+//                 "street_name" => "",
+//                 "pincode" => "",
+//                 "city" => "",
+//                 "state" => "",
+//                 "country" => "India"
+//             ],
+//             "mobile" => "",
+//             "email" => ""
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.pandetailss', compact(
+//         'panData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+
+
+        $request->validate([
+            'pan' => 'required|string|size:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'pan' => strtoupper($request->pan)
+        ];
+
+        // ---------- NON-DEMO ----------
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'panno')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/pan-validation',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $panData = json_decode($res->getBody(), true);
+                $statusCode = $panData['statusCode']
+                    ?? $panData['http_response_code']
+                    ?? $res->getStatusCode();
+        
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'PAN verification failed. Please enter a valid PAN.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.pandetailss', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ---------- DEMO ----------
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/pan-validation',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $panData = json_decode($res->getBody(), true);
+                    $statusCode = $panData['statusCode']
+                        ?? $panData['http_response_code']
+                        ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'PAN verification failed. Please enter a valid PAN.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.pandetailss', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.pandetailss', compact(
+                    'panData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.pandetailss', compact(
+            'panData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+
+
+public function pandetailsplus(Request $request)
+{
+    $statusCode = null;
+    $panData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ---------- GET ----------
+    if ($request->isMethod('GET')) {
+        return view('kyc.pandetailsplus', compact(
+            'panData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ---------- POST ----------
+    if ($request->isMethod('POST')) {
+    // ================= MOCK TEST (TEMPORARY) =================
+// if (true) {
+
+//     $panData = [
+//         "statusCode" => 200,
+//         "message" => "PAN details fetched successfully",
+//         "data" => [
+//             "pan" => $request->pan,
+//             "pan_type" => "Individual",
+//             "fullname" => "TEST USER",
+//             "first_name" => "TEST",
+//             "middle_name" => null,
+//             "last_name" => "USER",
+//             "gender" => "male",
+//             "dob" => "01-01-1990",
+//             "pan_status" => "Active",
+//             "pan_allotment_date" => "15-08-2010",
+//             "aadhaar_linked" => true,
+//             "address" => [
+//                 "building_name" => "",
+//                 "street_name" => "",
+//                 "locality" => "",
+//                 "city" => "Mumbai",
+//                 "state" => "MH",
+//                 "pincode" => "400001",
+//                 "country" => "India"
+//             ],
+//             "mobile" => null,
+//             "email" => null,
+//             "is_salaried" => true,
+//             "is_director" => false,
+//             "is_sole_proprietor" => false
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.pandetailsplus', compact(
+//         'panData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+// ================= END MOCK =================
+
+        $request->validate([
+            'pan' => 'required|string|size:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'pan' => strtoupper($request->pan)
+        ];
+
+        // ---------- NON-DEMO ----------
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'pannoplus')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/pan-validation-plus',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $panData = json_decode($res->getBody(), true);
+                $statusCode = $panData['statusCode']
+                    ?? $panData['http_response_code']
+                    ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'PAN verification failed. Please enter a valid PAN.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.pandetailsplus', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ---------- DEMO ----------
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/pan-validation-plus',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $panData = json_decode($res->getBody(), true);
+                    $statusCode = $panData['statusCode']
+                        ?? $panData['http_response_code']
+                        ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'PAN verification failed. Please enter a valid PAN.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.pandetailsplus', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.pandetailsplus', compact(
+                    'panData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.pandetailsplus', compact(
+            'panData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+
+public function pandetailsv4(Request $request)
+{
+    $statusCode = null;
+    $pan = null;
+    $errorMessage = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+   
+    if ($request->isMethod('GET')) {
+        return view('kyc.pandetailsv4', compact(
+            'pan',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance',
+            'errorMessage'
+        ));
+    }
+
+    // ---------- POST ----------
+    if ($request->isMethod('POST')) {
+//  if (true) {
+
+//     $pan = [
+//         'result_code' => 101,
+//         'data' => [
+//             'pan' => $request->pan,
+//             'fullname' => 'TEST USER',
+//             'first_name' => 'TEST',
+//             'middle_name' => '',
+//             'last_name' => 'USER',
+//             'dob' => '01-01-1990',
+//             'pan_status' => 'Active',
+//             'pan_type' => 'Individual',
+//             'father_name' => 'TEST FATHER',
+//             'gender' => 'male',
+//             'aadhaar_linked' => true,
+//             'address' => [
+//                 'building_name' => '',
+//                 'street_name' => '',
+//                 'locality' => '',
+//                 'city' => 'Mumbai',
+//                 'state' => 'MH',
+//                 'pincode' => '400001',
+//                 'country' => 'India',
+//             ],
+//             'mobile' => '',
+//             'email' => '',
+//         ]
+//     ];
+
+//     $statusCode = 101;
+
+//     return view('kyc.pandetailsv4', compact(
+//         'pan',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'pan' => $request->pan
+        ];
+
+        // ---------- NON-DEMO ----------
+        if (Auth::user()->scheme_type != 'demo') {
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/pandetails-v4',
+                    ['headers' => $headers, 'json' => $body]
+                );
+
+                $pan = json_decode($res->getBody(), true);
+
+                /**
+                 * SUCCESS
+                 * result_code = 101
+                 */
+                if (isset($pan['result_code']) && $pan['result_code'] == 101) {
+                    $statusCode = 101;
+
+                    return view('kyc.pandetailsv4', compact(
+                        'pan',
+                        'statusCode',
+                        'hit_limits_exceeded',
+                        'low_wallet_balance'
+                    ));
+                }
+
+                /**
+                 * IN-PROGRESS
+                 * statusCode = 104
+                 */
+                if (isset($pan['statusCode']) && $pan['statusCode'] == 104) {
+                    $statusCode = 104;
+                    $errorMessage = $pan['message'] ?? 'PAN verification is in progress. Please retry after some time.';
+
+                    return view('kyc.pandetailsv4', compact(
+                        'statusCode',
+                        'errorMessage',
+                        'pan',
+                        'hit_limits_exceeded',
+                        'low_wallet_balance'
+                    ));
+                }
+
+                /**
+                 * FAILED
+                 * statusCode = 102
+                 */
+                if (isset($pan['statusCode']) && $pan['statusCode'] == 102) {
+                    $statusCode = 102;
+                    $errorMessage = $pan['message'] ?? 'PAN validation failed';
+
+                    return view('kyc.pandetailsv4', compact(
+                        'statusCode',
+                        'errorMessage',
+                        'pan',
+                        'hit_limits_exceeded',
+                        'low_wallet_balance'
+                    ));
+                }
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in for more details.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Verification Failed. Please enter correct PAN Number.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in for more details.';
+                }
+
+                return view('kyc.pandetailsv4', compact(
+                    'statusCode',
+                    'errorMessage',
+                    'pan',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+
+        }
+        // ---------- DEMO ----------
+        else {
+
+            $scheme_type = SchemeTypeMaster::where('id', Auth::user()->scheme_type_id)->first();
+            $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/pandetails-v4',
+                        ['headers' => $headers, 'json' => $body]
+                    );
+
+                    $pan = json_decode($res->getBody(), true);
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                    return view('kyc.pandetailsv4', compact(
+                        'pan',
+                        'statusCode',
+                        'hit_limits_exceeded',
+                        'low_wallet_balance'
+                    ));
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in for more details.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Verification Failed. Please enter correct PAN Number.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in for more details.';
+                    }
+
+                    return view('kyc.pandetailsv4', compact(
+                        'statusCode',
+                        'errorMessage',
+                        'pan',
+                        'hit_limits_exceeded',
+                        'low_wallet_balance'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.pandetailsv4', compact(
+                    'pan',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+    }
+}
+
+
+public function dl_validation3(Request $request)
+{
+    $statusCode = null;
+    $dl = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ---------- GET ----------
+    if ($request->isMethod('GET')) {
+        return view('kyc.dl_validation', compact(
+            'dl',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ---------- POST ----------
+    if ($request->isMethod('POST')) {
+
+        // ---------- VALIDATION ----------
+        $request->validate([
+            'dlno'         => 'required|string',
+            'mobileNumber' => 'required|string|min:10|max:10',
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'Content-Type' => 'application/json',
+            'AccessToken'  => $accessToken,
+        ];
+
+        $body = [
+            'dlno'         => $request->dlno,
+            'mobileNumber' => $request->mobileNumber,
+            'recordId' => '69642721', 
+            'deviceId' => 'p38e0od88a649e62', 
+            'token' => 'sJ8K3a(n0tMUu1Ls',
+        ];
+
+        // ---------- NON-DEMO ----------
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'dl')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                // 🔹 Call YOUR backend API (not vendor directly)
+                $res = $client->post(
+                    'http://regtechapi.in/api/dl-validation',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body,
+                        'timeout' => 30
+                    ]
+                );
+
+                $dl = json_decode($res->getBody(), true);
+                $statusCode = $dl['statusCode']
+                    ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'DL verification failed. Please enter correct Driving Licence Number.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.dl_validation', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ---------- DEMO ----------
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/dl-validation',
+                        [
+                            'headers' => $headers,
+                            'json'    => $body,
+                            'timeout' => 20
+                        ]
+                    );
+
+                    $dl = json_decode($res->getBody(), true);
+                    $statusCode = $dl['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'DL verification failed. Please enter correct Driving Licence Number.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.dl_validation', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.dl_validation', compact(
+                    'dl',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.dl_validation', compact(
+            'dl',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+
+public function rc_validate(Request $request)
+{
+    $statusCode = null;
+    $rcData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+    $api_id = null;
+
+  
+    if ($request->isMethod('GET')) {
+        return view('kyc.rc_validate', compact(
+            'rcData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+   
+    if ($request->isMethod('POST')) {
+    //      $rcData = [
+    //     'statusCode' => 200,
+    //     'message' => 'TEST OK',
+    //     'result' => [
+    //         'registration' => [
+    //             'number' => $request->rcNumber
+    //         ]
+    //     ]
+    // ];
+
+    // return view('kyc.rc_validate', [
+    //     'rcData' => $rcData,
+    //     'statusCode' => 200,
+    //     'hit_limits_exceeded' => 0,
+    //     'low_wallet_balance' => 0
+    // ]);
+        $request->validate([
+            'rcNumber' => 'required'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'rcNumber' => $request->rcNumber
+        ];
+
+      
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'rcno')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/rc-validation',
+                    ['headers' => $headers, 'json' => $body]
+                );
+
+                $rcData = json_decode($res->getBody(), true);
+                $statusCode = $rcData['statusCode'] ?? 200;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Verification Failed. Please enter correct RC Number.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.rc_validate', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+
+        }
+      
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/rc-validation',
+                        ['headers' => $headers, 'json' => $body]
+                    );
+
+                    $rcData = json_decode($res->getBody(), true);
+                    $statusCode = $rcData['statusCode'] ?? 200;
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Verification Failed. Please enter correct RC Number.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.rc_validate', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.rc_validate', compact(
+                    'rcData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+    
+        return view('kyc.rc_validate', compact(
+            'rcData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+
+public function pan_compliance(Request $request)
+{
+    $statusCode = null;
+    $panData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+    $api_id = null;
+
+  
+    if ($request->isMethod('GET')) {
+        return view('kyc.pan_compliance', compact(
+            'panData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+   
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'pan' => 'required'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'pan' => $request->pan
+        ];
+
+      
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'pancomp')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/pan-compliance',
+                    ['headers' => $headers, 'json' => $body]
+                );
+
+                $panData = json_decode($res->getBody(), true);
+                $statusCode = $panData['statusCode'] ?? 200;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Verification Failed. Please enter correct RC Number.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.pan_compliance', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+
+        }
+      
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/pan-compliance',
+                        ['headers' => $headers, 'json' => $body]
+                    );
+
+                    $panData = json_decode($res->getBody(), true);
+                    $statusCode = $panData['statusCode'] ?? 200;
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Verification Failed. Please enter correct RC Number.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.pan_compliance', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.pan_compliance', compact(
+                    'panData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+    
+        return view('kyc.pan_compliance', compact(
+            'panData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function epfo(Request $request)
+{
+    $statusCode = null;
+    $epfoData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+    $api_id = null;
+
+    if ($request->isMethod('GET')) {
+        return view('kyc.epfo', compact(
+            'epfoData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'employee_name' => 'required|string',
+            'employer_name' => 'required|string',
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken
+        ];
+
+        $body = [
+            'employee_name' => $request->employee_name,
+            'employer_name' => $request->employer_name
+        ];
+
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'epfoev')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+                $res = $client->post(
+                    'http://regtechapi.in/api/epfo-ev',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                /* =======================
+                 * 🔥 FIX START
+                 * ======================= */
+                $responseData = json_decode($res->getBody(), true);
+
+                // unwrap API response
+                $statusCode = $responseData['statusCode'] ?? 200;
+                $epfoData   = $responseData['data'] ?? null;
+                /* =======================
+                 * 🔥 FIX END
+                 * ======================= */
+
+                if (!isset($epfoData['result_code']) && isset($epfoData['result'])) {
+                    $epfoData['result_code'] = 101;
+                }
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Verification failed. Please enter correct details.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.epfo', compact(
+                    'statusCode',
+                    'errorMessage',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+
+        } else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+                    $res = $client->post(
+                        'http://regtechapi.in/api/epfo-ev',
+                        [
+                            'headers' => $headers,
+                            'json'    => $body
+                        ]
+                    );
+
+                    /* 🔥 SAME FIX FOR DEMO */
+                    $responseData = json_decode($res->getBody(), true);
+                    $statusCode   = $responseData['statusCode'] ?? 200;
+                    $epfoData     = $responseData['data'] ?? null;
+
+                    if (!isset($epfoData['result_code']) && isset($epfoData['result'])) {
+                        $epfoData['result_code'] = 101;
+                    }
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Verification failed. Please enter correct details.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.epfo', compact(
+                        'statusCode',
+                        'errorMessage',
+                        'hit_limits_exceeded',
+                        'low_wallet_balance'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+            }
+        }
+
+        return view('kyc.epfo', compact(
+            'epfoData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+
+
+
+public function upi_basic(Request $request)
+{
+    $statusCode = null;
+    $upiData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+    $api_id = null;
+
+
+    if ($request->isMethod('GET')) {
+        return view('kyc.upi_basic', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'vpa' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+            
+        ];
+
+        $body = [
+            'vpa' => $request->vpa
+        ];
+
+       
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'upibasic')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/upi-basic',
+                    [
+                        'headers'         => $headers,
+                        'json'            => $body,
+                           
+                    ]
+                );
+
+                $upiData = json_decode($res->getBody(), true);
+
+                $statusCode = $upiData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Verification Failed. Please enter correct VPA.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.upi_basic', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+
+        }
+     
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/upi-basic',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 15,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $upiData = json_decode($res->getBody(), true);
+                    $statusCode = $upiData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Verification Failed. Please enter correct VPA.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.upi_basic', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.upi_basic', compact(
+                    'upiData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+       
+        return view('kyc.upi_basic', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+// if (true) { // =
+//     $upiData = [
+//         "http_response_code" => 200,
+//         "result_code" => 101,
+//         "message" => "VPA Found",
+//         "result" => [
+//             "vpa_details" => [
+//                 "vpa" => $request->vpa,
+//                 "account_holder_name" => $request->name
+//             ],
+//             "name_match" => true,
+//             "name_match_score" => 92
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.upi_basic_name', compact(
+//         'upiData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+public function gstin_authentication(Request $request)
+{ 
+    $statusCode = null;
+    $upiData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+
+    if ($request->isMethod('GET')) {
+        return view('kyc.upi_basic_name', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+ 
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'vpa'  => 'required|string',
+            'name' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'vpa'  => $request->vpa,
+            'name' => $request->name
+        ];
+
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'upinamematch')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/upi-basic-name',
+                    [
+                        'headers'         => $headers,
+                        'json'            => $body,
+                        'timeout'         => 15,
+                        'connect_timeout' => 5
+                    ]
+                );
+
+                $upiData = json_decode($res->getBody(), true);
+                $statusCode = $upiData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Verification Failed. Please enter correct VPA or Name.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.upi_basic_name', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+
+        }
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/upi-basic-name',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 15,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $upiData = json_decode($res->getBody(), true);
+                    $statusCode = $upiData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Verification Failed. Please enter correct VPA or Name.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.upi_basic_name', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.upi_basic_name', compact(
+                    'upiData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+     
+        return view('kyc.upi_basic_name', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function upi_basic_name(Request $request)
+{ 
+    $statusCode = null;
+    $upiData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+
+    if ($request->isMethod('GET')) {
+        return view('kyc.upi_basic_name', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+ 
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'vpa'  => 'required|string',
+            'name' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'vpa'  => $request->vpa,
+            'name' => $request->name
+        ];
+
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'upinamematch')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/upi-basic-name',
+                    [
+                        'headers'         => $headers,
+                        'json'            => $body,
+                        'timeout'         => 15,
+                        'connect_timeout' => 5
+                    ]
+                );
+
+                $upiData = json_decode($res->getBody(), true);
+                $statusCode = $upiData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Verification Failed. Please enter correct VPA or Name.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.upi_basic_name', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+
+        }
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/upi-basic-name',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 15,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $upiData = json_decode($res->getBody(), true);
+                    $statusCode = $upiData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Verification Failed. Please enter correct VPA or Name.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.upi_basic_name', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.upi_basic_name', compact(
+                    'upiData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+     
+        return view('kyc.upi_basic_name', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function gstin_authentication_ui(Request $request)
+{
+    $statusCode = null;
+    $gstData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+   
+    if ($request->isMethod('GET')) {
+        return view('kyc.gstin_authentication', compact(
+            'gstData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+   
+    if ($request->isMethod('POST')) {
+
+//         if (true) { 
+
+//     $gstData = [
+//         "http_response_code" => 200,
+//         "result_code" => 101,
+//         "message" => "GSTIN Found",
+//         "result" => [
+//             "taxpayerDetails" => [
+//                 "gstin" => $request->gstin,
+//                 "lgnm" => "RELIANCE INDUSTRIES LIMITED",
+//                 "tradeNam" => "RELIANCE INDUSTRIES LIMITED",
+//                 "sts" => "Active",
+//                 "ctb" => "Public Limited Company",
+//                 "dty" => "Regular",
+//                 "rgdt" => "01/07/2017",
+//                 "pradr" => [
+//                     "adr" => "Navi Mumbai, Maharashtra, 400701"
+//                 ]
+//             ]
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.gstin_authentication', compact(
+//         'gstData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+
+// }
+
+
+        $request->validate([
+            'gstin' => 'required|string|size:15'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'gstin' => $request->gstin
+        ];
+
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'gstinauth')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+//    return 'test';
+            try {
+
+// $apiRequest = HttpRequest::create(
+//     '/api/gstin-authentication',
+//     'POST',
+//     ['gstin' => $request->gstin]
+// );
+
+// // attach AccessToken header
+// $apiRequest->headers->set(
+//     'AccessToken',
+//     Auth::user()->access_token
+// );
+
+// // call API
+// $api = app(\App\Http\Controllers\ApiController2::class);
+// $response = $api->gstin_authentication($apiRequest);
+
+// // convert JsonResponse → array
+// $gstData = $response->getData(true);
+// $statusCode = $gstData['http_response_code'] ?? 200;
+
+                $res = $client->post(
+                    
+                    'http://regtechapi.in/api/gstin-authentication',
+                    [
+                        'headers'         => $headers,
+                        'json'            => $body,
+                        
+                    ]
+                );
+
+
+                $gstData = json_decode($res->getBody(), true);
+                $statusCode = $gstData['http_response_code'] ?? $res->getStatusCode();
+                // return $gstData;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'GSTIN verification failed. Please enter a valid GSTIN.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.gstin_authentication', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+
+        }
+      
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/gstin-authentication',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $gstData = json_decode($res->getBody(), true);
+                    $statusCode = $gstData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'GSTIN verification failed. Please enter a valid GSTIN.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.gstin_authentication', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.gstin_authentication', compact(
+                    'gstData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+      
+        return view('kyc.gstin_authentication', compact(
+            'gstData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function gstin_advanced_ui(Request $request)
+{
+    $statusCode = null;
+    $gstData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ---------- GET ----------
+    if ($request->isMethod('GET')) {
+        return view('kyc.gstin_advanced', compact(
+            'gstData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ---------- POST ----------
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'gstin' => 'required|string|size:15'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'gstin' => $request->gstin
+        ];
+
+        // ---------- NON-DEMO ----------
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'gstinadvanced')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+//                    if (true) { 
+
+//     $gstData = [
+//         "http_response_code" => 200,
+//         "result_code" => 101,
+//         "message" => "GSTIN Found",
+//         "result" => [
+//             "taxpayerDetails" => [
+//                 "gstin" => $request->gstin,
+//                 "lgnm" => "RELIANCE INDUSTRIES LIMITED",
+//                 "tradeNam" => "RELIANCE INDUSTRIES LIMITED",
+//                 "sts" => "Active",
+//                 "ctb" => "Public Limited Company",
+//                 "dty" => "Regular",
+//                 "rgdt" => "01/07/2017",
+//                 "einvoiceStatus" => "Yes",
+//                 "adhrVFlag" => "Yes",
+//                 "ekycVFlag" => "Not Applicable",
+//                 "pradr" => [
+//                     "adr" => "Navi Mumbai, Maharashtra, 400701"
+//                 ]
+//             ]
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.gstin_advanced', compact(
+//         'gstData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/gstin-advanced',
+                    [
+                        'headers'         => $headers,
+                        'json'            => $body
+                    ]
+                );
+
+                $gstData = json_decode($res->getBody(), true);
+                $statusCode = $gstData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'GSTIN advanced verification failed. Please enter a valid GSTIN.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.gstin_advanced', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+
+        }
+        // ---------- DEMO ----------
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/gstin-advanced',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $gstData = json_decode($res->getBody(), true);
+                    $statusCode = $gstData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'GSTIN advanced verification failed. Please enter a valid GSTIN.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.gstin_advanced', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.gstin_advanced', compact(
+                    'gstData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.gstin_advanced', compact(
+            'gstData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function pan_aadhaar_link_ui(Request $request)
+{
+    $statusCode = null;
+    $linkData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    
+    if ($request->isMethod('GET')) {
+        return view('kyc.pan_aadhaar_link', compact(
+            'linkData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+   
+    if ($request->isMethod('POST')) {
+//         if (true) {
+
+//     $linkData = [
+//         "http_response_code" => 200,
+//         "result_code" => 101,
+//         "request_id" => "mock-request-id",
+//         "client_ref_num" => "test",
+//         "result" => [
+//             "message" => "Is already linked to given Aadhaar",
+//             "code" => "LINK-001"
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.pan_aadhaar_link', compact(
+//         'linkData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+        $request->validate([
+            'pan'     => 'required|string|size:10',
+            'aadhaar' => 'required|string|size:12'
+        ]);
+       
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'pan'     => strtoupper($request->pan),
+            'aadhaar' => $request->aadhaar
+        ];
+
+        // ---------- NON-DEMO ----------
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'panaadhaar')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/pan-aadhaar-link',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $linkData = json_decode($res->getBody(), true);
+                $statusCode = $linkData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'PAN–Aadhaar verification failed. Please enter valid details.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.pan_aadhaar_link', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+       
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/pan-aadhaar-link',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $linkData = json_decode($res->getBody(), true);
+                    $statusCode = $linkData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'PAN–Aadhaar verification failed. Please enter valid details.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.pan_aadhaar_link', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.pan_aadhaar_link', compact(
+                    'linkData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.pan_aadhaar_link', compact(
+            'linkData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+
+public function pan_to_fname_ui(Request $request)
+{
+    $statusCode = null;
+    $fnameData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+ 
+    if ($request->isMethod('GET')) {
+        return view('kyc.pan_to_fname', compact(
+            'fnameData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+ 
+    if ($request->isMethod('POST')) {
+  
+// if (true) {
+
+//     $fnameData = [
+//         "http_response_code" => 200,
+//         "result_code" => 101,
+//         "request_id" => "mock-request-id",
+//         "client_ref_num" => "test",
+//         "result" => [
+//             "pan" => strtoupper($request->pan),
+//             "father_name" => "SUBHASH SHRIRAM DEORE"
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.pan_to_fname', compact(
+//         'fnameData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+
+
+        $request->validate([
+            'pan' => 'required|string|size:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'pan' => strtoupper($request->pan)
+        ];
+
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'pantofname')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'https://regtechapi.in/api/pan-fname',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $fnameData = json_decode($res->getBody(), true);
+                $statusCode = $fnameData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'PAN to Father Name verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.pan_to_fname', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+    
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'https://regtechapi.in/api/pan-fname',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $fnameData = json_decode($res->getBody(), true);
+                    $statusCode = $fnameData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'PAN to Father Name verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.pan_to_fname', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.pan_to_fname', compact(
+                    'fnameData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.pan_to_fname', compact(
+            'fnameData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function arm_verification(Request $request)
+{
+    $statusCode = null;
+    $armData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+    
+
+    if ($request->isMethod('GET')) {
+        return view('kyc.arm_verification', compact(
+            'armData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+
+    if ($request->isMethod('POST')) {
+// if (true) {
+
+//     $armData = [
+//         "message" => "Success",
+//         "http_response_code" => 200,
+//         "transaction_id" => "test-txn-123",
+//         "client_ref_id" => "test_ref",
+//         "result" => [
+//             "status" => "OK",
+//             "risk_score" => 452,
+//             "risk_band" => "medium",
+//             "services" => [
+//                 "pan_insights" => [
+//                     "result" => [
+//                         "fullname" => "ASHUTOSH SUBHASH DEORE",
+//                         "dob" => "04/01/2004"
+//                     ]
+//                 ]
+//             ],
+//             "raw_feature_url" => "#"
+//         ],
+//         "raw_input" => [
+//             "pan" => strtoupper($request->pan),
+//             "name" => strtolower($request->name),
+//             "email" => $request->email,
+//             "mobile_no" => $request->mobile_no
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.arm_verification', compact(
+//         'armData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+
+        $request->validate([
+            'pan'       => 'required|string|size:10',
+            'name'      => 'required|string',
+            'email'     => 'required|email',
+            'mobile_no' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'pan'           => strtoupper($request->pan),
+            'name'          => $request->name,
+            'email'         => $request->email,
+            'mobile_no'     => $request->mobile_no,
+            'client_ref_id' => uniqid('arm_')
+        ];
+
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'arm')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/arm-verification',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $armData = json_decode($res->getBody(), true);
+                $statusCode = $armData['statusCode']
+                    ?? $armData['http_response_code']
+                    ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+            
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'ARM verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.arm_verification', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+      
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/arm-verification',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $armData = json_decode($res->getBody(), true);
+                    $statusCode = $armData['statusCode']
+                        ?? $armData['http_response_code']
+                        ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'ARM verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.arm_verification', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.arm_verification', compact(
+                    'armData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.arm_verification', compact(
+            'armData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function pan_to_name(Request $request)
+{
+    $statusCode = null;
+    $panData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+    $errorMessage = null;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.pan_to_name', compact(
+            'panData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance',
+            'errorMessage'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        // ---------- VALIDATION ----------
+        $request->validate([
+            'pan' => 'required|string|size:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'pan' => strtoupper($request->pan)
+        ];
+     
+        // ---------- LIVE USERS ----------
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'pantoname')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'https://regtechapi.in/api/pan-name',
+                    [
+                        'headers'         => $headers,
+                        'json'            => $body,
+                        
+                    ]
+                );
+
+                $panData = json_decode($res->getBody(), true);
+            // return  $panData ;
+                $statusCode = $panData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'PAN to Name verification failed.';
+                } elseif ($statusCode == 401) {
+                    $errorMessage = 'Unauthorized request. Please check Access Token.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+            }
+        }
+
+        // ---------- DEMO USERS ----------
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'https://regtechapi.in/api/pa-name',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                           
+                        ]
+                    );
+
+                    $panData = json_decode($res->getBody(), true);
+                    $statusCode = $panData['http_response_code'] ?? $res->getStatusCode();
+
+                    // update hit count
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'PAN to Name verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+            }
+        }
+
+        return view('kyc.pan_to_name', compact(
+            'panData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance',
+            'errorMessage'
+        ));
+    }
+}
+public function upi_merchant(Request $request)
+{
+    $statusCode = null;
+    $upiData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ---------- GET ----------
+    if ($request->isMethod('GET')) {
+        return view('kyc.upi_merchant', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ---------- POST ----------
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'vpa' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'vpa' => $request->vpa
+        ];
+
+        // ---------- NON DEMO ----------
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'upibasic')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/upi-basic',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $upiData = json_decode($res->getBody(), true);
+                $statusCode = $upiData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'UPI validation failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.upi_merchant', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/upi-basic',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $upiData = json_decode($res->getBody(), true);
+                    $statusCode = $upiData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'UPI validation failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.upi_basic', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.upi_merchant', compact(
+                    'upiData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.upi_merchant', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function address_verification_ui(Request $request)
+{
+    $statusCode = null;
+    $addressData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ---------- GET ----------
+    if ($request->isMethod('GET')) {
+        return view('kyc.address_verification', compact(
+            'addressData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ---------- POST ----------
+//     if ($request->isMethod('POST')) {
+//       if (true) {
+
+//     $addressData = [
+//         "code" => "200",
+//         "model" => [
+//             "address"  => "I-17, HAL 2nd Stage, Kodihalli, Bengaluru, Karnataka 560008, India",
+//             "pincode"  => "560008",
+//             "district" => "Bangalore Division",
+//             "state"    => "Karnataka"
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.address_verification', compact(
+//         'addressData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+
+        $request->validate([
+            'latitude'  => 'required|string',
+            'longitude' => 'required|string',
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'uniqueId'  => $request->uniqueId ?? 'DIGITAP001',
+            'latitude'  => $request->latitude,
+            'longitude' => $request->longitude,
+        ];
+
+        // ---------- NON DEMO ----------
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'addressverification')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/address-verification',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $addressData = json_decode($res->getBody(), true);
+                $statusCode = $addressData['code']
+                    ?? $addressData['statusCode']
+                    ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Address verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.address_verification', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ---------- DEMO ----------
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/address-verification',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $addressData = json_decode($res->getBody(), true);
+                    $statusCode = $addressData['code']
+                        ?? $addressData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Address verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.address_verification', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.address_verification', compact(
+                    'addressData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.address_verification', compact(
+            'addressData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+    public function upi_enhanced(Request $request)
+{
+    $statusCode = null;
+    $upiData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+   
+    if ($request->isMethod('GET')) {
+        return view('kyc.upi_enhanced', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'vpa' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'client_ref_num' => $request->client_ref_num ?? 'ref_' . time(),
+            'vpa'            => $request->vpa
+        ];
+
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'upienhanced')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/upi-enhanced',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $upiData = json_decode($res->getBody(), true);
+                $statusCode = $upiData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'UPI Enhanced verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.upi_enhanced', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+      
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/upi-enhanced',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $upiData = json_decode($res->getBody(), true);
+                    $statusCode = $upiData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'UPI Enhanced verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.upi_enhanced', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.upi_enhanced', compact(
+                    'upiData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.upi_enhanced', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function company_to_pan(Request $request)
+{
+    $statusCode = null;
+    $companyData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+   
+    if ($request->isMethod('GET')) {
+        return view('kyc.company_to_pan', compact(
+            'companyData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+   
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'company_name' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'company_name'         => $request->company_name,
+            'output_count'         => $request->output_count ?? '10',
+            'client_ref_num'       => $request->client_ref_num ?? 'ref_' . time(),
+            'search_by_trade_name' => $request->search_by_trade_name ? true : false
+        ];
+
+      
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'companytopan')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/company-to-pan',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $companyData = json_decode($res->getBody(), true);
+                $statusCode = $companyData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Company to PAN verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.company_to_pan', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/company-to-pan',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $companyData = json_decode($res->getBody(), true);
+                    $statusCode = $companyData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Company to PAN verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.company_to_pan', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.company_to_pan', compact(
+                    'companyData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.company_to_pan', compact(
+            'companyData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function tds_quarterly(Request $request)
+{
+    $statusCode = null;
+    $tdsData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    
+    if ($request->isMethod('GET')) {
+        return view('kyc.tds_quarterly', compact(
+            'tdsData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'pan'            => 'required|string|size:10',
+            'tan'            => 'required|string',
+            'financial_year' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'client_ref_num' => $request->client_ref_num ?? 'test',
+            'pan'            => strtoupper($request->pan),
+            'tan'            => strtoupper($request->tan),
+            'financial_year' => $request->financial_year
+        ];
+
+    
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'tdsquarterly')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/tds-quarterly',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $tdsData = json_decode($res->getBody(), true);
+                $statusCode = $tdsData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'TDS Quarterly verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.tds_quarterly', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+       
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/tds-quarterly',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $tdsData = json_decode($res->getBody(), true);
+                    $statusCode = $tdsData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'TDS Quarterly verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.tds_quarterly', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.tds_quarterly', compact(
+                    'tdsData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.tds_quarterly', compact(
+            'tdsData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function rc_validationthree(Request $request)
+{
+    $statusCode = null;
+    $rcData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+   
+    if ($request->isMethod('GET')) {
+        return view('kyc.rc_validationthree', compact(
+            'rcData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+   
+    if ($request->isMethod('POST')) {
+// if (true) {
+
+//    $cars24Data = [
+//     'success' => true,
+//     'detail' => [
+//         'rcStatus' => 'ACTIVE',
+//         'registeredPlace' => 'Mumbai RTO',
+//         'registeredAt' => '2021-07-14',
+//         'fitnessUpTo' => '2036-07-13',
+//         'rc_owner_name' => 'TEST USER',
+//         'rc_owner_sr' => 1,
+//         'vehicleClassDesc' => 'LMV',
+//         'vehicleCategory' => 'Car',
+//         'brand' => [
+//             'make_display' => 'MARUTI'
+//         ],
+//         'model' => [
+//             'model_display' => 'SWIFT',
+//             'bodyType' => 'Hatchback'
+//         ],
+//         'regn_year' => '2021',
+//         'color' => 'White',
+//         'fuelType' => 'Petrol',
+//         'seatCap' => 5,
+//         'isCommercial' => false,
+//         'insuranceCompany' => 'ICICI Lombard',
+//         'insurancePolicyNo' => 'POL123',
+//         'insuranceUpTo' => '2026-01-01',
+//         'hypothecation' => 'HDFC',
+//         'financier' => 'HDFC Bank'
+//     ]
+// ];
+
+
+
+//     $statusCode = 200;
+// return view('kyc.rc_validationthree', compact(
+//     'cars24Data',
+//     'statusCode',
+//     'hit_limits_exceeded',
+//     'low_wallet_balance'
+// ));
+
+// }
+
+        $request->validate([
+            'rcNumber' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'rcNumber' => strtoupper(str_replace('-', '', $request->rcNumber))
+        ];
+
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'rcthree')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/rc-validation-three',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $rcData = json_decode($res->getBody(), true);
+                $statusCode = $rcData['statusCode'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'RC verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.rc_validationthree', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+       
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/rc-validation-three',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                           
+                        ]
+                    );
+
+                    $rcData = json_decode($res->getBody(), true);
+                    $statusCode = $rcData['statusCode'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+                    $errorMessage = 'RC verification failed.';
+
+                    return view('kyc.rc_validationthree', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.rc_validationthree', compact(
+                    'rcData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.rc_validationthree', compact(
+            'rcData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function employment_uan(Request $request)
+{
+    $statusCode = null;
+    $uanData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    if ($request->isMethod('GET')) {
+        return view('kyc.employment_uan', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'employee_name' => 'required|string',
+            'dob'           => 'required|date'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'employee_name' => $request->employee_name,
+            'dob'           => $request->dob
+        ];
+
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'employmentuan')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'https://regtechapi.in/api/employment-uan',
+                    options: [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $uanData = json_decode($res->getBody(), true);
+                $statusCode = $uanData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Employment UAN verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.employment_uan', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+       
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'https://regtechapi.in/api/employment-uan',
+                        [
+                            'headers' => $headers,
+                            'json'    => $body
+                        ]
+                    );
+
+                    $uanData = json_decode($res->getBody(), true);
+                    $statusCode = $uanData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+                    $errorMessage = 'Employment UAN verification failed.';
+
+                    return view('kyc.employment_uan', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.employment_uan', compact(
+                    'uanData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.employment_uan', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function dl_validate(Request $request)
+{
+    $statusCode = null;
+    $dlData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+  
+    if ($request->isMethod('GET')) {
+        return view('kyc.dl_validate', compact(
+            'dlData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+   
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'dl_number' => 'required|string',
+            'dob'       => 'required|date'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'client_ref_num' => $request->client_ref_num ?? 'test',
+            'dl_number'      => strtoupper($request->dl_number),
+            'dob'            => $request->dob
+        ];
+
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'dlvalidation')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/dl-validation-v3',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $dlData = json_decode($res->getBody(), true);
+                $statusCode = $dlData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'DL verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.dl_validate', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/dl-validation-v3',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $dlData = json_decode($res->getBody(), true);
+                    $statusCode = $dlData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'DL verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.dl_validate', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.dl_validate', compact(
+                    'dlData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.dl_validate', compact(
+            'dlData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function dl_validation(Request $request)
+{
+    $statusCode = null;
+    $dlData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.dl_validation', compact(
+            'dlData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'dl_number' => 'required|string',
+            'dob'       => 'required|date'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'dl_number'      => $request->dl_number,
+            'dob'            => $request->dob,
+            'client_ref_num' => uniqid('dl_')
+        ];
+
+        // ================= NON-DEMO =================
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'dlvalidationnew'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/dl-validation-v3',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $responseData['http_response_code']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                // SUCCESS DATA
+                if (($responseData['result_code'] ?? null) == 101) {
+                    $dlData = $responseData['result'] ?? null;
+                }
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Driving License verification failed.';
+                }
+
+                return view('kyc.dl_validation', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/dl-validation-v3',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $responseData['http_response_code']
+                        ?? $res->getStatusCode();
+
+                    if (($responseData['result_code'] ?? null) == 101) {
+                        $dlData = $responseData['result'] ?? null;
+                    }
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Driving License verification failed.';
+                    }
+
+                    return view('kyc.dl_validation', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.dl_validation', compact(
+                    'dlData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.dl_validation', compact(
+            'dlData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+
+public function employment_uan_v3(Request $request)
+{
+    $statusCode = null;
+    $uanData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.employment_uan_v3', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'uan' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'client_ref_num' => $request->client_ref_num ?? 'test',
+            'uan'            => $request->uan
+        ];
+
+        // ================= NON-DEMO =================
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'employmentuanvthree')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/employment-uan-v3',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $uanData = json_decode($res->getBody(), true);
+                $statusCode = $uanData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Employment UAN v3 verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.employment_uan_v3', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/employment-uan-v3',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $uanData = json_decode($res->getBody(), true);
+                    $statusCode = $uanData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Employment UAN v3 verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.employment_uan_v3', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.employment_uan_v3', compact(
+                    'uanData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.employment_uan_v3', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function employment_uan_v4(Request $request)
+{
+    $statusCode = null;
+    $uanData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.employment_uan_v4', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'uan' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'client_ref_num' => $request->client_ref_num ?? 'test',
+            'uan'            => $request->uan
+        ];
+
+        // ================= NON-DEMO =================
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'employmentuanvfour')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/employment-uan-v4',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $uanData = json_decode($res->getBody(), true);
+                $statusCode = $uanData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Employment UAN v4 verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.employment_uan_v4', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/employment-uan-v4',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $uanData = json_decode($res->getBody(), true);
+                    $statusCode = $uanData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+                    $errorMessage = 'Employment UAN v4 verification failed.';
+
+                    return view('kyc.employment_uan_v4', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.employment_uan_v4', compact(
+                    'uanData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.employment_uan_v4', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function employment_uan_v5(Request $request)
+{
+    $statusCode = null;
+    $uanData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.employment_uan_v5', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'uan_list' => 'required|string'
+        ]);
+
+        // Convert comma-separated UANs to array
+        $uanList = array_values(array_filter(array_map(
+            'trim',
+            explode(',', $request->uan_list)
+        )));
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'client_ref_num' => $request->client_ref_num ?? 'test',
+            'uan_list'       => $uanList
+        ];
+
+        // ================= NON-DEMO =================
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'employmentuanvfive')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/employment-uan-v5',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $uanData = json_decode($res->getBody(), true);
+                $statusCode = $uanData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Employment UAN v5 verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.employment_uan_v5', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/employment-uan-v5',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $uanData = json_decode($res->getBody(), true);
+                    $statusCode = $uanData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Employment UAN v5 verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.employment_uan_v5', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.employment_uan_v5', compact(
+                    'uanData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.employment_uan_v5', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function employment_uan_advanced_v2(Request $request)
+{
+    $statusCode = null;
+    $uanData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.employment_uan_advanced_v2', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'employee_name' => 'required|string',
+            'dob'           => 'required|date'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'client_ref_num' => $request->client_ref_num ?? 'test',
+            'employee_name'  => $request->employee_name,
+            'dob'            => $request->dob
+        ];
+
+        // ================= NON-DEMO =================
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'employmentuanadvancedv2'
+                )->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/employment-uan-advanced-v2',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $uanData = json_decode($res->getBody(), true);
+                $statusCode = $uanData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Employment UAN Advanced verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view(
+                    'kyc.employment_uan_advanced_v2',
+                    compact('statusCode', 'errorMessage')
+                );
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::find(
+                Auth::user()->scheme_type_id
+            );
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/employment-uan-advanced-v2',
+                        [
+                            'headers' => $headers,
+                            'json'    => $body,
+                            'timeout' => 20
+                        ]
+                    );
+
+                    $uanData = json_decode($res->getBody(), true);
+                    $statusCode = $uanData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+                    $errorMessage = 'Employment UAN Advanced verification failed.';
+
+                    return view(
+                        'kyc.employment_uan_advanced_v2',
+                        compact('statusCode', 'errorMessage')
+                    );
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+            }
+        }
+
+        return view('kyc.employment_uan_advanced_v2', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function mobile_prefill(Request $request)
+{
+    $statusCode = null;
+    $mobilePrefillData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+
+    if ($request->isMethod('GET')) {
+        return view('kyc.mobile_prefill', compact(
+            'mobilePrefillData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+   
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile_no' => 'required|digits:10'
+
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile_no'      => $request->mobile_no,
+            'client_ref_num' => uniqid('mp_'),
+            'name_lookup'    => 1
+        ];
+
+      
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'mobileprefills')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/mobile-prefill',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+                $statusCode   = $responseData['statusCode']
+                    ?? $responseData['status_code']
+                    ?? $res->getStatusCode();
+
+               
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $mobilePrefillData = $responseData[0]['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Mobile Prefill failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.mobile_prefill', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+     
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/mobile-prefill',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+                    $statusCode   = $responseData['statusCode']
+                        ?? $responseData['status_code']
+                        ?? $res->getStatusCode();
+
+                    $mobilePrefillData = $responseData[0]['data'] ?? null;
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Mobile Prefill failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.mobile_prefill', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.mobile_prefill', compact(
+                    'mobilePrefillData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.mobile_prefill', compact(
+            'mobilePrefillData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function employment_uan_advanced_v3(Request $request)
+{
+    $statusCode = null;
+    $uanData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    
+    if ($request->isMethod('GET')) {
+        return view('kyc.uan_advanced', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'uan' => 'required|digits:12'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'uan'            => $request->uan,
+            'client_ref_num' => uniqid('uan_')
+        ];
+
+       
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'uanadvanced')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/employment-uan-advanced-v3',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+                
+                $uanData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'UAN verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.uan_advanced', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+       
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/employment-uan-advanced-v3',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $uanData = $responseData['data'] ?? null;
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'UAN verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.uan_advanced', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.uan_advanced', compact(
+                    'uanData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.uan_advanced', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function whatsapp_number_check(Request $request)
+{
+    $statusCode = null;
+    $whatsappData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+
+    if ($request->isMethod('GET')) {
+        return view('kyc.whatsapp_number_check', compact(
+            'whatsappData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile' => 'required|digits:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile'         => $request->mobile,
+            'client_ref_num' => uniqid('wnc_')
+        ];
+
+       
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'whatsapp_number_check'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/whatsapp-number-check',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $whatsappData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'WhatsApp number verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.whatsapp_number_check', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/whatsapp-number-check',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $whatsappData = $responseData['data'] ?? null;
+
+                    $user = User::where(
+                        'id',
+                        Auth::user()->id
+                    )->first();
+
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'WhatsApp number verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.whatsapp_number_check', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.whatsapp_number_check', compact(
+                    'whatsappData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.whatsapp_number_check', compact(
+            'whatsappData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function whatsapp_advanced(Request $request)
+{
+    $statusCode = null;
+    $whatsappData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    
+    if ($request->isMethod('GET')) {
+        return view('kyc.whatsapp_advanced', compact(
+            'whatsappData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile' => 'required|digits:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile'         => $request->mobile,
+            'client_ref_num' => uniqid('wa_')
+        ];
+
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'whatsapp_advanced'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/whatsapp-advanced',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $whatsappData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage = 'WhatsApp verification failed.';
+                }
+
+                return view('kyc.whatsapp_advanced', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/whatsapp-advanced',
+                        [
+                            'headers' => $headers,
+                            'json'    => $body
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $whatsappData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    return view('kyc.whatsapp_advanced', compact(
+                        'statusCode'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+            }
+        }
+
+        return view('kyc.whatsapp_advanced', compact(
+            'whatsappData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function contact_to_gst(Request $request)
+{
+    $statusCode = null;
+    $gstData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // GET
+    if ($request->isMethod('GET')) {
+        return view('kyc.contact_to_gst', compact(
+            'gstData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // POST
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile' => 'required|digits:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile'         => $request->mobile,
+            'client_ref_num' => uniqid('ctg_')
+        ];
+
+        // NON-DEMO
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'contact_to_gst'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/contact-to-gst',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $gstData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'GST verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.contact_to_gst', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // DEMO
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/contact-to-gst',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $gstData = $responseData['data'] ?? null;
+
+                    $user = User::where(
+                        'id',
+                        Auth::user()->id
+                    )->first();
+
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'GST verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.contact_to_gst', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.contact_to_gst', compact(
+                    'gstData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.contact_to_gst', compact(
+            'gstData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function gst_to_contacts(Request $request)
+{
+    $statusCode = null;
+    $gstData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // GET
+    if ($request->isMethod('GET')) {
+        return view('kyc.gst_to_contacts', compact(
+            'gstData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // POST
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'gstin' => 'required|size:15'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'gstin'          => $request->gstin,
+            'client_ref_num' => uniqid('gtc_')
+        ];
+
+        // NON-DEMO
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'gst_to_contacts'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/gst-to-contacts',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $gstData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'GST contact verification failed.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.gst_to_contacts', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // DEMO
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/gst-to-contacts',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $gstData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'GST contact verification failed.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.gst_to_contacts', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.gst_to_contacts', compact(
+                    'gstData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.gst_to_contacts', compact(
+            'gstData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function ecom_generate_url(Request $request)
+{
+    $statusCode = null;
+    $ecomData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    
+    if ($request->isMethod('GET')) {
+        return view('kyc.ecom_generate_url', compact(
+            'ecomData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'client_ref_num'      => 'required',
+            'txn_completed_cburl' => 'required|url',
+            'return_url'          => 'required|url'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        
+        $body = [
+            'payload' => [
+                'client_ref_num'      => $request->client_ref_num,
+                'txn_completed_cburl' => $request->txn_completed_cburl,
+                'return_url'          => $request->return_url,
+                'website'             => $request->website ?? '1'
+            ]
+        ];
+
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'ecom_generate_url'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/ecom-generate-url',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $ecomData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Failed to generate transaction URL.';
+                }
+
+                return view('kyc.ecom_generate_url', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+    
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/ecom-generate-url',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $ecomData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Failed to generate transaction URL.';
+                    }
+
+                    return view('kyc.ecom_generate_url', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.ecom_generate_url', compact(
+                    'ecomData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.ecom_generate_url', compact(
+            'ecomData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function ecom_url_username(Request $request)
+{
+    $statusCode = null;
+    $ecomData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+   
+    if ($request->isMethod('GET')) {
+        return view('kyc.ecom_url_username', compact(
+            'ecomData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'client_ref_num'      => 'required',
+            'txn_completed_cburl' => 'required|url',
+            'return_url'          => 'required|url',
+            'username'            => 'required'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+       
+        $body = [
+            'payload' => [
+                'client_ref_num'      => $request->client_ref_num,
+                'txn_completed_cburl' => $request->txn_completed_cburl,
+                'return_url'          => $request->return_url,
+                'username'            => $request->username,
+                'is_editable'         => $request->is_editable ?? 'true'
+            ]
+        ];
+
+       
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'ecom_generate_url'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/ecom-url-username',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $ecomData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Failed to generate transaction URL.';
+                }
+
+                return view('kyc.ecom_url_username', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+      
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/ecom-url-username',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $ecomData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Failed to generate transaction URL.';
+                    }
+
+                    return view('kyc.ecom_url_username', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.ecom_url_username', compact(
+                    'ecomData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.ecom_url_username', compact(
+            'ecomData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function ecom_generate_url_username(Request $request)
+{
+    $statusCode = null;
+    $ecomData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    
+    if ($request->isMethod('GET')) {
+        return view('kyc.ecom_generate_url_username', compact(
+            'ecomData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'client_ref_num'      => 'required',
+            'txn_completed_cburl' => 'required|url',
+            'return_url'          => 'required|url',
+            'username'            => 'required'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+       
+        $body = [
+            'payload' => [
+                'client_ref_num'      => $request->client_ref_num,
+                'txn_completed_cburl' => $request->txn_completed_cburl,
+                'return_url'          => $request->return_url,
+                'username'            => $request->username,
+                'is_editable'         =>  'false'
+            ]
+        ];
+
+
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'ecom_generate_url'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/ecom-generate-url-username',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $ecomData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Failed to generate transaction URL.';
+                }
+
+                return view('kyc.ecom_generate_url_username', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/ecom-generate-url-username',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $ecomData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Failed to generate transaction URL.';
+                    }
+
+                    return view('kyc.ecom_generate_url_username', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.ecom_generate_url_username', compact(
+                    'ecomData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        
+        return view('kyc.ecom_generate_url_username', compact(
+            'ecomData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function tan_to_company(Request $request)
+{
+    $statusCode = null;
+    $tanData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // GET
+    if ($request->isMethod('GET')) {
+        return view('kyc.tan_to_company', compact(
+            'tanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // POST
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'tan' => 'required|size:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'tan'            => $request->tan,
+            'client_ref_num' => uniqid('tan_')
+        ];
+
+        // NON-DEMO
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'tan_to_company'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/tan-to-company',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $tanData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'TAN verification failed.';
+                }
+
+                return view('kyc.tan_to_company', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // DEMO
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/tan-to-company',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $tanData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'TAN verification failed.';
+                    }
+
+                    return view('kyc.tan_to_company', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.tan_to_company', compact(
+                    'tanData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.tan_to_company', compact(
+            'tanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function ecom_generate_url_order_duration(Request $request)
+{
+    $statusCode = null;
+    $ecomData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.ecom_generate_url_order_duration', compact(
+            'ecomData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'client_ref_num'      => 'required',
+            'txn_completed_cburl' => 'required|url',
+            'return_url'          => 'required|url',
+            'order_duration'      => 'required'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'payload' => [
+                'client_ref_num'      => $request->client_ref_num,
+                'txn_completed_cburl' => $request->txn_completed_cburl,
+                'return_url'          => $request->return_url,
+                'order_duration'      => $request->order_duration
+            ]
+        ];
+
+        // ================= NON-DEMO =================
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'ecom_generate_url'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/ecom-generate-url-order-duration',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $ecomData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Failed to generate transaction URL.';
+                }
+
+                return view('kyc.ecom_generate_url_order_duration', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/ecom-generate-url-order-duration',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $ecomData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Failed to generate transaction URL.';
+                    }
+
+                    return view('kyc.ecom_generate_url_order_duration', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.ecom_generate_url_order_duration', compact(
+                    'ecomData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+     
+        return view('kyc.ecom_generate_url_order_duration', compact(
+            'ecomData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function ecom_websites_list(Request $request)
+{
+    $statusCode = null;
+    $websiteData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.ecom_websites_list', compact(
+            'websiteData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        // ================= NON-DEMO =================
+        if (Auth::user()->scheme_type != 'demo') {
+           if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'contact_to_gst'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+            try {
+
+                $res = $client->get(
+                    'http://regtechapi.in/api/ecom-websites-list',
+                    [
+                        'headers' => $headers,
+                        'timeout' => 20
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $websiteData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Failed to fetch website list.';
+                }
+
+                return view('kyc.ecom_websites_list', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->get(
+                        'http://regtechapi.in/api/ecom-websites-list',
+                        [
+                            'headers'         => $headers,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $websiteData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Failed to fetch website list.';
+                    }
+
+                    return view('kyc.ecom_websites_list', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.ecom_websites_list', compact(
+                    'websiteData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.ecom_websites_list', compact(
+            'websiteData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function mobile_upi_lookup(Request $request)
+{
+    $statusCode = null;
+    $upiData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+   
+    
+    if ($request->isMethod('GET')) {
+        return view('kyc.mobile_upi_lookup', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+   
+    
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile' => 'required|digits:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'client_ref_num' => uniqid('upi_'),
+            'mobile'         => $request->mobile
+        ];
+
+        
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/mobile-upi-lookup',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body,
+                        'timeout' => 20
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $upiData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Failed to fetch mobile UPI details.';
+                }
+
+                return view('kyc.mobile_upi_lookup', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/mobile-upi-lookup',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $upiData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Failed to fetch mobile UPI details.';
+                    }
+
+                    return view('kyc.mobile_upi_lookup', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.mobile_upi_lookup', compact(
+                    'upiData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.mobile_upi_lookup', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function mobile_upi_name(Request $request)
+{
+    $statusCode = null;
+    $upiData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+ 
+    if ($request->isMethod('GET')) {
+        return view('kyc.mobile_upi_name', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile' => 'required|digits:10',
+            'name'   => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'client_ref_num' => uniqid('upi_'),
+            'mobile'         => $request->mobile,
+            'name'           => $request->name
+        ];
+
+        if (Auth::user()->scheme_type != 'demo') {
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/mobile-upi-name',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body,
+                        
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $upiData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Failed to fetch mobile UPI details.';
+                }
+
+                return view('kyc.mobile_upi_name', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+     
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/mobile-upi-name',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $upiData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Failed to fetch mobile UPI details.';
+                    }
+
+                    return view('kyc.mobile_upi_name', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.mobile_upi_name', compact(
+                    'upiData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.mobile_upi_name', compact(
+            'upiData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function uan_basic_pan(Request $request)
+{
+    $statusCode = null;
+    $uanData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+  
+    if ($request->isMethod('GET')) {
+        return view('kyc.uan_basic_pan', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+   
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'pan' => 'required|string|size:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'client_ref_num' => uniqid('uan_'),
+            'pan'            => $request->pan
+        ];
+
+     
+        if (Auth::user()->scheme_type != 'demo') {
+          if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'uanbasicpan'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/uan-basic-sync',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body,
+                        'timeout' => 20
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $uanData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Failed to fetch UAN details.';
+                }
+
+                return view('kyc.uan_basic_pan', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/uan-basic-sync',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $uanData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Failed to fetch UAN details.';
+                    }
+
+                    return view('kyc.uan_basic_pan', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.uan_basic_pan', compact(
+                    'uanData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.uan_basic_pan', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function uan_basic_pan_v4(Request $request)
+{
+    $statusCode = null;
+    $uanData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    if ($request->isMethod('GET')) {
+        return view('kyc.uan_basic_pan_v4', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'pan' => 'required|string|size:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'client_ref_num' => uniqid('uan_'),
+            'pan'            => $request->pan
+        ];
+
+       
+        if (Auth::user()->scheme_type != 'demo') {
+           if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'uanbasicvfour'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/uan-basic-pan-v4',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $uanData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Failed to fetch UAN details.';
+                }
+
+                return view('kyc.uan_basic_pan_v4', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/uan-basic-pan-v4',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $uanData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Failed to fetch UAN details.';
+                    }
+
+                    return view('kyc.uan_basic_pan_v4', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.uan_basic_pan_v4', compact(
+                    'uanData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.uan_basic_pan_v4', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function pan_to_din(Request $request)
+{
+    $statusCode = null;
+    $dinData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+   
+    if ($request->isMethod('GET')) {
+        return view('kyc.pan_to_din', compact(
+            'dinData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'pan' => 'required|size:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'pan'            => $request->pan,
+            'client_ref_num' => uniqid('din_')
+        ];
+
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'pantodinvone'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/pan-to-din',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $dinData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'PAN to DIN verification failed.';
+                }
+
+                return view('kyc.pan_to_din', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+      
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/pan-to-din',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $dinData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'PAN to DIN verification failed.';
+                    }
+
+                    return view('kyc.pan_to_din', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.pan_to_din', compact(
+                    'dinData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.pan_to_din', compact(
+            'dinData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function mobile_with_name_lookup(Request $request)
+{
+    $statusCode = null;
+    $mobileData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+  
+    if ($request->isMethod('GET')) {
+        return view('kyc.mobile_name_lookup', compact(
+            'mobileData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+ 
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile' => 'required|digits:10',
+            'name'   => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile'         => $request->mobile,
+            'name'           => $request->name,
+            'client_ref_num' => uniqid('mnl_')
+        ];
+
+    
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'mobilenamelookupvone'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/mobile-with-name-lookup',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $mobileData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Mobile name lookup failed.';
+                }
+
+                return view('kyc.mobile_name_lookup', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/mobile-with-name-lookup',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $mobileData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Mobile name lookup failed.';
+                    }
+
+                    return view('kyc.mobile_name_lookup', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.mobile_name_lookup', compact(
+                    'mobileData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.mobile_name_lookup', compact(
+            'mobileData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function mobile_number_lookup(Request $request)
+{
+   
+    $statusCode = null;
+    $mobileData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    
+    if ($request->isMethod('GET')) {
+        return view('kyc.mobile_number_lookup', compact(
+            'mobileData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile' => 'required|digits:10',
+            'name'   => 'required|string'
+        ]);
+         
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile'         => $request->mobile,
+            'name'           => $request->name,
+            'client_ref_num' => uniqid('mnl_')
+        ];
+
+     
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'mobilenumberlookup'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/mobile-number-lookup',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $mobileData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Mobile name lookup failed.';
+                }
+
+                return view('kyc.mobile_number_lookup', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/mobile-name-lookup-v1',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $mobileData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Mobile name lookup failed.';
+                    }
+
+                    return view('kyc.mobile_number_lookup', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.mobile_number_lookup', compact(
+                    'mobileData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.mobile_number_lookup', compact(
+            'mobileData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function mobile_porting_history(Request $request)
+{
+    // return 'test';
+    $statusCode = null;
+    $mobileData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.mobile_porting_history', compact(
+            'mobileData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile_number' => 'required|digits:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile_number' => $request->mobile_number,
+            'client_ref_num'=> uniqid('mph_')
+        ];
+
+        // ================= NON-DEMO =================
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'mobileportinghistory'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/mobile-porting-history',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $mobileData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                $errorMessage = $statusCode == 500
+                    ? 'Internal server error. Please contact techsupport@docboyz.in.'
+                    : 'Mobile porting history lookup failed.';
+
+                return view('kyc.mobile_porting_history', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/mobile-porting-history',
+                        [
+                            'headers' => $headers,
+                            'json'    => $body
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $mobileData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    $errorMessage = 'Mobile porting history lookup failed.';
+
+                    return view('kyc.mobile_porting_history', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.mobile_porting_history', compact(
+                    'mobileData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.mobile_porting_history', compact(
+            'mobileData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function mobile_customer_details(Request $request)
+{
+    $statusCode = null;
+    $mobileData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    
+    if ($request->isMethod('GET')) {
+        return view('kyc.mobile_customer_details', compact(
+            'mobileData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile_number' => 'required|digits:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile_number' => $request->mobile_number,
+            'client_ref_num'=> uniqid('ml_'),
+            'options'       => ['customer_details']
+        ];
+
+       
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'mobilecustomerdetails'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/mobile-customer-details',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $mobileData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'Mobile customer lookup failed.';
+                }
+
+                return view('kyc.mobile_customer_details', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/mobile-customer-details',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $mobileData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'Mobile customer lookup failed.';
+                    }
+
+                    return view('kyc.mobile_customer_details', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.mobile_customer_details', compact(
+                    'mobileData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.mobile_customer_details', compact(
+            'mobileData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function mobile_vintage_lookup(Request $request)
+{
+    $statusCode = null;
+    $vintageData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.mobile_vintage_lookup', compact(
+            'vintageData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile' => 'required|digits:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile'         => $request->mobile,
+            'client_ref_num' => uniqid('mv_')
+        ];
+
+        // ================= NON-DEMO =================
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'mobilevintage'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/mobile-vintage-lookup',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $vintageData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                $errorMessage = ($statusCode == 500)
+                    ? 'Internal server error. Please contact techsupport@docboyz.in.'
+                    : 'Mobile vintage lookup failed.';
+
+                return view('kyc.mobile_vintage_lookup', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($remaining > 0) {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/mobile-vintage-lookup',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                $vintageData = $responseData['data'] ?? null;
+
+                $user = User::find(Auth::user()->id);
+                $user->scheme_hit_count += 1;
+                $user->save();
+
+            } else {
+                $hit_limits_exceeded = 1;
+            }
+        }
+
+        return view('kyc.mobile_vintage_lookup', compact(
+            'vintageData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function uan_basic_mobile_name(Request $request)
+{
+    $statusCode = null;
+    $uanData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.uan_basic_mobile', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile'        => 'required|digits:10',
+            'employee_name' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile'         => $request->mobile,
+            'employee_name'  => $request->employee_name,
+            'client_ref_num' => uniqid('uan_')
+        ];
+
+        // ================= NON-DEMO =================
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'uanbasicmobile'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/uan-mobile-name',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $uanData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                $errorMessage = ($statusCode == 500)
+                    ? 'Internal server error. Please contact techsupport@docboyz.in.'
+                    : 'UAN lookup failed.';
+
+                return view('kyc.uan_basic_mobile', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($remaining > 0) {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/uan-mobile-name',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                $uanData = $responseData['data'] ?? null;
+
+                $user = User::find(Auth::user()->id);
+                $user->scheme_hit_count += 1;
+                $user->save();
+
+            } else {
+                $hit_limits_exceeded = 1;
+            }
+        }
+
+        return view('kyc.uan_basic_mobile', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function uan_basic(Request $request)
+{
+    $statusCode = null;
+    $uanData = null;
+    $api_id = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+
+    // ================= GET =================
+    if ($request->isMethod('GET')) {
+        return view('kyc.uan_basic', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    // ================= POST =================
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'mobile' => 'required|digits:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile'         => $request->mobile,
+            'client_ref_num' => uniqid('uan_')
+        ];
+
+        // ================= NON-DEMO =================
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where(
+                    'api_slug',
+                    'uanbasic'
+                )->first();
+
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/uan-basic',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $responseData = json_decode($res->getBody(), true);
+
+                $statusCode = $responseData['statusCode']
+                    ?? $res->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $low_wallet_balance = 1;
+                }
+
+                if ($statusCode == 103) {
+                    $hit_limits_exceeded = 1;
+                }
+
+                $uanData = $responseData['data'] ?? null;
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage =
+                        'Internal server error. Please contact techsupport@docboyz.in.';
+                } else {
+                    $errorMessage =
+                        'UAN basic verification failed.';
+                }
+
+                return view('kyc.uan_basic', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+
+        // ================= DEMO =================
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/uan-basic',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 20,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $responseData = json_decode($res->getBody(), true);
+
+                    $statusCode = $responseData['statusCode']
+                        ?? $res->getStatusCode();
+
+                    $uanData = $responseData['data'] ?? null;
+
+                    $user = User::find(Auth::user()->id);
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage =
+                            'Internal server error. Please contact techsupport@docboyz.in.';
+                    } else {
+                        $errorMessage =
+                            'UAN basic verification failed.';
+                    }
+
+                    return view('kyc.uan_basic', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.uan_basic', compact(
+                    'uanData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.uan_basic', compact(
+            'uanData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function company_search_v1(Request $request)
+{
+    $statusCode = null;
+    $companyData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+    $api_id = null;
+
+    
+    if ($request->isMethod('GET')) {
+        return view('kyc.company_search_v1', compact(
+            'companyData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    if ($request->isMethod('POST')) {
+
+        $request->validate([
+            'employer_name' => 'required|string'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'employer_name' => $request->employer_name
+        ];
+
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'companysearchvone')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/company-search-v1',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $companyData = json_decode($res->getBody(), true);
+                $statusCode  = $companyData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Verification Failed. Please enter correct company name.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.company_search_v1', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+
+        }
+
+    
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/company-search-v1',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 15,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $companyData = json_decode($res->getBody(), true);
+                    $statusCode  = $companyData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Verification Failed. Please enter correct company name.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.company_search_v1', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.company_search_v1', compact(
+                    'companyData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.company_search_v1', compact(
+            'companyData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function gstin_pan_search(Request $request)
+{
+    $statusCode = null;
+    $gstData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+    $api_id = null;
+
+    /* ---------------- GET ---------------- */
+
+    if ($request->isMethod('GET')) {
+        return view('kyc.gstin_pan_search', compact(
+            'gstData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    /* ---------------- POST ---------------- */
+
+    if ($request->isMethod('POST')) {
+//         if (true) {
+
+//     $gstData = [
+//         "http_response_code" => 200,
+//         "result_code" => 101,
+//         "request_id" => "mock-request-id",
+//         "client_ref_num" => "test",
+//         "result" => [
+//             "count" => 2,
+//             "gstinResList" => [
+//                 [
+//                     "gstin" => "27AAJCN6404D1ZM",
+//                     "authStatus" => "Active",
+//                     "state" => "Maharashtra",
+//                     "stateCd" => "27"
+//                 ],
+//                 [
+//                     "gstin" => "29AAJCN6404D1ZP",
+//                     "authStatus" => "Active",
+//                     "state" => "Karnataka",
+//                     "stateCd" => "29"
+//                 ]
+//             ]
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.gstin_pan_search', compact(
+//         'gstData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+        $request->validate([
+            'pan' => 'required|string|min:10|max:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'pan' => $request->pan
+        ];
+
+        /* ---------------- NON-DEMO FLOW ---------------- */
+
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'gstpansearch')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/gstin-pan-search',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $gstData = json_decode($res->getBody(), true);
+                $statusCode = $gstData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Verification Failed. Please enter correct PAN.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.gstin_pan_search', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+
+        }
+
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/gstin-pan-search',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 15,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $gstData = json_decode($res->getBody(), true);
+                    $statusCode = $gstData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Verification Failed. Please enter correct PAN.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.gstin_pan_search', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.gstin_pan_search', compact(
+                    'gstData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.gstin_pan_search', compact(
+            'gstData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function bankPassbook_ocr(Request $request)
+{
+    $statusCode = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+    $bankData = null;
+
+    
+    if ($request->isMethod('get')) {
+        return view(
+            'kyc.bankPassbook_ocr',
+            compact('bankData', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance')
+        );
+    }
+
+    
+    if ($request->isMethod('post')) {
+
+        if (!$request->hasFile('file')) {
+            $errorMessage = "File is required.";
+            return view('kyc.bankPassbook_ocr', compact('bankData', 'errorMessage'));
+        }
+
+        
+        if (Auth::user()->scheme_type != 'demo') {
+
+            $accessToken = Auth::user()->access_token;
+
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => url('/api/bank-passbook-ocr'), 
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => 'POST',
+                CURLOPT_HTTPHEADER => [
+                    "AccessToken: $accessToken"
+                ],
+                CURLOPT_POSTFIELDS => [
+                    'file' => new \CURLFile(
+                        $_FILES['file']['tmp_name'],
+                        $_FILES['file']['type'],
+                        $_FILES['file']['name']
+                    ),
+                    'client_ref_id' => uniqid('bspb_'),
+                    'account_holder_name' => $request->account_holder_name ?? ''
+                ],
+            ]);
+
+            $response = curl_exec($curl);
+            curl_close($curl);
+
+            $bankData = json_decode($response, true);
+
+            if (isset($bankData['statusCode']) && $bankData['statusCode'] == 200) {
+                return view('kyc.bankPassbook_ocr', compact('bankData'));
+            }
+
+            $errorMessage = $bankData['message'] ?? 'Internal Server Error.';
+            return view('kyc.bankPassbook_ocr', compact('bankData', 'errorMessage'));
+        }
+
+       
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                $user = User::where('id', Auth::user()->id)->first();
+                $user->scheme_hit_count += 1;
+                $user->save();
+
+                $accessToken = Auth::user()->access_token;
+
+                $curl = curl_init();
+                curl_setopt_array($curl, [
+                    CURLOPT_URL => url('http://regtechapi.in/api/bank-passbook-ocr'),
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_CUSTOMREQUEST => 'POST',
+                    CURLOPT_HTTPHEADER => [
+                        "AccessToken: $accessToken"
+                    ],
+                    CURLOPT_POSTFIELDS => [
+                        'file' => new \CURLFile(
+                            $_FILES['file']['tmp_name'],
+                            $_FILES['file']['type'],
+                            $_FILES['file']['name']
+                        ),
+                        'client_ref_id' => uniqid('bspb_'),
+                        'account_holder_name' => $request->account_holder_name ?? ''
+                    ],
+                ]);
+
+                $response = curl_exec($curl);
+                curl_close($curl);
+
+                $bankData = json_decode($response, true);
+
+                if (isset($bankData['statusCode']) && $bankData['statusCode'] == 200) {
+                    return view('kyc.bankPassbook_ocr', compact('bankData'));
+                }
+
+                $errorMessage = $bankData['message'] ?? 'Internal Server Error.';
+                return view('kyc.bankPassbook_ocr', compact('bankData', 'errorMessage'));
+            }
+
+         
+            $hit_limits_exceeded = 1;
+            return view(
+                'kyc.bankPassbook_ocr',
+                compact('bankData', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance')
+            );
+        }
+    }
+}
+
+public function mobile_to_udyam_search(Request $request)
+{
+    $statusCode = null;
+    $udyamData = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+    $api_id = null;
+
+
+    if ($request->isMethod('GET')) {
+        return view('kyc.mobile_to_udyam_search', compact(
+            'udyamData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+
+    
+    if ($request->isMethod('POST')) {
+    
+// if (true) {
+
+//     $udyamData = [
+//         "http_response_code" => 200,
+//         "result_code" => 101,
+//         "request_id" => "mock-udyam-request-id",
+//         "client_ref_num" => "test_udyam",
+//         "mobile" => "8470067555",
+//         "result" => [
+//             [
+//                 "udyam_number" => "UDYAM-MH-26-0194830",
+//                 "enterprise_name" => "M/S ZAPFIN TEKNOLOGIES PRIVATE LIMITED"
+//             ],
+//             [
+//                 "udyam_number" => "UDYAM-MH-26-0685022",
+//                 "enterprise_name" => "NovaCred Private Limited"
+//             ]
+//         ]
+//     ];
+
+//     $statusCode = 200;
+
+//     return view('kyc.mobile_to_udyam_search', compact(
+//         'udyamData',
+//         'statusCode',
+//         'hit_limits_exceeded',
+//         'low_wallet_balance'
+//     ));
+// }
+
+
+        $request->validate([
+            'mobile' => 'required|digits:10'
+        ]);
+
+        $client = new Client();
+        $accessToken = Auth::user()->access_token;
+
+        $headers = [
+            'AccessToken' => $accessToken,
+        ];
+
+        $body = [
+            'mobile' => $request->mobile,
+            'client_ref_num' => uniqid('mobile_udyam_')
+        ];
+
+        if (Auth::user()->scheme_type != 'demo') {
+
+            if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'mobiletoudyam')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+
+            try {
+
+                $res = $client->post(
+                    'http://regtechapi.in/api/mobile-to-udyam',
+                    [
+                        'headers' => $headers,
+                        'json'    => $body
+                    ]
+                );
+
+                $udyamData = json_decode($res->getBody(), true);
+                $statusCode = $udyamData['http_response_code'] ?? $res->getStatusCode();
+
+            } catch (BadResponseException $e) {
+
+                $statusCode = $e->getResponse()->getStatusCode();
+
+                if ($statusCode == 500) {
+                    $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                } elseif ($statusCode == 422) {
+                    $errorMessage = 'Verification failed. Please enter correct mobile number.';
+                } else {
+                    $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                }
+
+                return view('kyc.mobile_to_udyam_search', compact(
+                    'statusCode',
+                    'errorMessage'
+                ));
+            }
+        }
+         else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining =
+                $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                try {
+
+                    $res = $client->post(
+                        'http://regtechapi.in/api/mobile-to-udyam',
+                        [
+                            'headers'         => $headers,
+                            'json'            => $body,
+                            'timeout'         => 15,
+                            'connect_timeout' => 5
+                        ]
+                    );
+
+                    $udyamData = json_decode($res->getBody(), true);
+                    $statusCode = $udyamData['http_response_code'] ?? $res->getStatusCode();
+
+                    $user = User::where('id', Auth::user()->id)->first();
+                    $user->scheme_hit_count += 1;
+                    $user->save();
+
+                } catch (BadResponseException $e) {
+
+                    $statusCode = $e->getResponse()->getStatusCode();
+
+                    if ($statusCode == 500) {
+                        $errorMessage = 'Internal server error. Please contact techsupport@docboyz.in.';
+                    } elseif ($statusCode == 422) {
+                        $errorMessage = 'Verification failed. Please enter correct mobile number.';
+                    } else {
+                        $errorMessage = 'Error. Please contact techsupport@docboyz.in.';
+                    }
+
+                    return view('kyc.mobile_to_udyam_search', compact(
+                        'statusCode',
+                        'errorMessage'
+                    ));
+                }
+
+            } else {
+
+                $hit_limits_exceeded = 1;
+
+                return view('kyc.mobile_to_udyam_search', compact(
+                    'udyamData',
+                    'statusCode',
+                    'hit_limits_exceeded',
+                    'low_wallet_balance'
+                ));
+            }
+        }
+
+        return view('kyc.mobile_to_udyam_search', compact(
+            'udyamData',
+            'statusCode',
+            'hit_limits_exceeded',
+            'low_wallet_balance'
+        ));
+    }
+}
+public function cheque_ocr(Request $request)
+{
+    $statusCode = null;
+    $hit_limits_exceeded = 0;
+    $low_wallet_balance = 0;
+    $chequeData = null;
+
+    
+    if ($request->isMethod('get')) {
+        return view(
+            'kyc.cheque_ocr',
+            compact('chequeData', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance')
+        );
+    }
+
+   
+    if ($request->isMethod('post')) {
+
+        if (!$request->hasFile('file')) {
+            $errorMessage = "File is required.";
+            return view('kyc.cheque_ocr', compact('chequeData', 'errorMessage'));
+        }
+
+    
+        if (Auth::user()->scheme_type != 'demo') {
+
+            $accessToken = Auth::user()->access_token;
+              if (Auth::user()->role_id == 1) {
+                $apiamster = ApiMaster::where('api_slug', 'chequeocr')->first();
+                if ($apiamster) {
+                    $api_id = $apiamster->id;
+                }
+            }
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => url('http://regtechapi.in/api/cheque-ocr'),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => 'POST',
+                CURLOPT_HTTPHEADER => [
+                    "AccessToken: $accessToken"
+                ],
+                CURLOPT_POSTFIELDS => [
+                    'file' => new \CURLFile(
+                        $_FILES['file']['tmp_name'],
+                        $_FILES['file']['type'],
+                        $_FILES['file']['name']
+                    ),
+                    'client_ref_id' => uniqid('chq_'),
+                    'account_holder_name' => $request->account_holder_name ?? '',
+                    'is_complete_image' => 'yes'
+                ],
+            ]);
+
+            $response = curl_exec($curl);
+            curl_close($curl);
+
+            $chequeData = json_decode($response, true);
+
+            if (isset($chequeData['statusCode']) && $chequeData['statusCode'] == 200) {
+                return view('kyc.cheque_ocr', compact('chequeData'));
+            }
+
+            $errorMessage = $chequeData['message'] ?? 'Internal Server Error.';
+            return view('kyc.cheque_ocr', compact('chequeData', 'errorMessage'));
+        }
+
+        
+        else {
+
+            $scheme_type = SchemeTypeMaster::where(
+                'id',
+                Auth::user()->scheme_type_id
+            )->first();
+
+            $hit_count_remaining = $scheme_type->hit_limits - Auth::user()->scheme_hit_count;
+
+            if ($hit_count_remaining > 0) {
+
+                $user = User::where('id', Auth::user()->id)->first();
+                $user->scheme_hit_count += 1;
+                $user->save();
+
+                $accessToken = Auth::user()->access_token;
+
+                $curl = curl_init();
+                curl_setopt_array($curl, [
+                    CURLOPT_URL => url('/api/cheque-ocr'),
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_CUSTOMREQUEST => 'POST',
+                    CURLOPT_HTTPHEADER => [
+                        "AccessToken: $accessToken"
+                    ],
+                    CURLOPT_POSTFIELDS => [
+                        'file' => new \CURLFile(
+                            $_FILES['file']['tmp_name'],
+                            $_FILES['file']['type'],
+                            $_FILES['file']['name']
+                        ),
+                        'client_ref_id' => uniqid('chq_'),
+                        'account_holder_name' => $request->account_holder_name ?? '',
+                        'is_complete_image' => 'yes'
+                    ],
+                ]);
+
+                $response = curl_exec($curl);
+                curl_close($curl);
+
+                $chequeData = json_decode($response, true);
+
+                if (isset($chequeData['statusCode']) && $chequeData['statusCode'] == 200) {
+                    return view('kyc.cheque_ocr', compact('chequeData'));
+                }
+
+                $errorMessage = $chequeData['message'] ?? 'Internal Server Error.';
+                return view('kyc.cheque_ocr', compact('chequeData', 'errorMessage'));
+            }
+
+            
+            $hit_limits_exceeded = 1;
+            return view(
+                'kyc.cheque_ocr',
+                compact('chequeData', 'statusCode', 'hit_limits_exceeded', 'low_wallet_balance')
+            );
+        }
+    }
+}
+
+}
+
 
 

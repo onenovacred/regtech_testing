@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RegTech API</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* Global Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Roboto', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f4f7f9;
+        }
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        /* Header & Hero Section */
+        header {
+            background: linear-gradient(135deg, #003366, #0056b3);
+            color: #fff;
+            text-align: center;
+            padding: 100px 20px 60px;
+        }
+        header h1 {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        header p {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            opacity: 0.8;
+        }
+        .hero-buttons a {
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        .login-button {
+            background-color: #ffcc00;
+            color: #003366;
+        }
+        .login-button:hover {
+            background-color: #ffc107;
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .cta-button {
+            background-color: #00d1ff;
+            color: #003366;
+        }
+        .cta-button:hover {
+            background-color: #00aaff;
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        /* Navigation */
+        nav {
+            background-color: #fff;
+            display: flex;
+            justify-content: center;
+            padding: 15px 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        nav a {
+            margin: 0 20px;
+            font-weight: 500;
+            color: #003366;
+            transition: color 0.3s;
+        }
+        nav a:hover {
+            color: #00d1ff;
+        }
+
+        /* Sections */
+        section {
+            padding: 80px 20px;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        h2 {
+            font-size: 2.2rem;
+            color: #003366;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        p, ul {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+        ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        ul li {
+            background: #e0e7ff;
+            padding: 12px 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        ul li:hover {
+            background: #c0d8ff;
+        }
+
+        /* Pricing Cards */
+        .pricing-cards {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            margin-top: 40px;
+        }
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            padding: 30px 20px;
+            margin: 15px;
+            flex: 1 1 250px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 25px rgba(0,0,0,0.15);
+        }
+        .card h3 {
+            color: #003366;
+            margin-bottom: 15px;
+        }
+        .card p {
+            margin-bottom: 15px;
+        }
+
+        /* Contact Section */
+        .contact-info {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            margin-top: 30px;
+        }
+        .contact-info div {
+            background: #fff;
+            padding: 20px;
+            margin: 10px;
+            border-radius: 12px;
+            flex: 1 1 250px;
+            box-shadow: 0 10px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .contact-info div a {
+            color: #00d1ff;
+        }
+
+        /* Footer */
+        footer {
+            background-color: #003366;
+            color: white;
+            text-align: center;
+            padding: 30px 20px;
+        }
+
+        /* Responsive */
+        @media(max-width:768px) {
+            nav {
+                flex-direction: column;
+            }
+            nav a {
+                margin: 10px 0;
+            }
+            .hero-buttons a {
+                display: block;
+                width: 70%;
+                margin: 10px auto;
+            }
+            .pricing-cards, .contact-info {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>RegTech API -Testing</h1>
+    <p>Transforming Compliance with Cutting-Edge Technology</p>
+    <div class="hero-buttons">
+        <a href="https://regtechapi.in/login" target="_blank" class="login-button">Login</a>
+        <a href="#api-docs" class="cta-button">Explore API Docs</a>
+    </div>
+</header>
+
+<nav>
+    <a href="#features">Features</a>
+    <a href="#api-docs">API Docs</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#contact">Contact</a>
+</nav>
+
+<section id="features">
+    <div class="container">
+        <h2>Key Features</h2>
+        <ul>
+            <li>Automated KYC (Know Your Customer) Verification</li>
+            <li>Real-time AML (Anti-Money Laundering) Checks</li>
+            <li>Data Encryption and Privacy Protection</li>
+            <li>Regulatory Reporting and Auditing</li>
+            <li>Scalable API for Easy Integration</li>
+        </ul>
+    </div>
+</section>
+
+<section id="api-docs">
+    <div class="container">
+        <h2>API Documentation</h2>
+        <ul>
+            <li><strong>/kyc/verify</strong> - Verify customer identity in real time.</li>
+            <li><strong>/aml/check</strong> - Perform an Anti-Money Laundering check on a transaction.</li>
+            <li><strong>/report/generate</strong> - Generate compliance reports for audits and record-keeping.</li>
+        </ul>
+        <p style="text-align:center;">For detailed instructions and sample code, check our full documentation <a href="#">here</a>.</p>
+    </div>
+</section>
+
+<section id="pricing">
+    <div class="container">
+        <h2>Pricing Plans</h2>
+        <div class="pricing-cards">
+            <div class="card">
+                <h3>Free Plan</h3>
+                <p>Limited features, up to 100 requests/month</p>
+            </div>
+            <div class="card">
+                <h3>Basic Plan</h3>
+                <p>$49/month, 1,000 requests/month</p>
+            </div>
+            <div class="card">
+                <h3>Pro Plan</h3>
+                <p>$199/month, 10,000 requests/month</p>
+            </div>
+            <div class="card">
+                <h3>Enterprise Plan</h3>
+                <p>Custom pricing, unlimited requests and features</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section id="contact">
+    <div class="container">
+        <h2>Contact Us</h2>
+        <div class="contact-info">
+            <div>
+                <h3>Email</h3>
+                <p><a href="mailto:support@regtechapi.com">support@regtechapi.com</a></p>
+            </div>
+            <div>
+                <h3>Phone</h3>
+                <p>+1 (800) 123-4567</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<footer>
+    <p>&copy; 2025 RegTech API. All rights reserved.</p>
+</footer>
+
+</body>
+</html>

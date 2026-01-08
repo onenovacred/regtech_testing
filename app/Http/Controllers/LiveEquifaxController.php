@@ -751,11 +751,13 @@ class LiveEquifaxController extends Controller
                 $response = $client -> post($this->regtech_url,[
                     'headers' => $headers,'json' => $body
                 ]);
+               
                 $data = $request->all();
-                dd($data);
+                // dd($data);
                 // $responses = (new ApiController2)->equifaxurl($data);
                 //  print_r(json_decode($response -> getBody(),true));
                 $equifaxdetails = json_decode($response -> getBody(),true);
+                //  return $equifaxdetails;
                 if($equifaxdetails['statusCode'] != 102)
                 {
                     $equifax = $equifaxdetails['Equifax_Report'];
@@ -1168,7 +1170,7 @@ class LiveEquifaxController extends Controller
                             
                         }
 
-                        dd($myarray);
+                        // dd($myarray);
                         
                         // return $myarray;
                         // return view('kyc.equifaxreportpdf',compact('myarray','equifax'));
@@ -1178,7 +1180,7 @@ class LiveEquifaxController extends Controller
 
                 }
                 $pan_num = $request->pan_num;
-                dd($equifaxdetails);
+                // dd($equifaxdetails);
                 $pdf = PDF::loadView('kyc.equifaxreportpdferror',compact('equifaxdetails','pan_num'))->setPaper('A4');
                 return $pdf->stream('invoice.pdf');
                 // $statusCode = 102;

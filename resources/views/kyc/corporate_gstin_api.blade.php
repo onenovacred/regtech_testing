@@ -18,7 +18,7 @@
         <!-- <b>Request Method : POST</b><br> -->
         <b>Request Body : </b><br>
         {<br>   
-        "corporate_gstin":"27AABCZ2858B1ZC"<br>
+        "gstin":"27AABCZ2858B1ZC"<br>
         }<br>
 
         <b>Success Response : </b><br>

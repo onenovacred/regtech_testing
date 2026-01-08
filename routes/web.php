@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\KycController;
-use App\Http\Controllers\ApiController3;
+// use App\Http\Controllers\ApiController3;
 use Illuminate\Support\Facades\Route;
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -18,21 +20,31 @@ use Illuminate\Support\Facades\Route;
 // Route::get('/', function () {
 //     return view('welcome');
 // });
+// Route::get('/{any}', function () {
+//     return file_get_contents('public_path('site/index.html')');
+
+// })->where('any', '^(?!api).*$');
+
 
 Route::get('/hash-form', function() {
     return view('form');
 });
 
-Route::post('/submit-form', 'SearchDataController1@handleForm')->name('submitForm');
+// Route::post('/submit-form', 'SearchDataController1@handleForm')->name('submitForm');
 
 
 /*HomeController */
 Route::get('/home','HomeController@index')->name('home')->middleware('auth');
 /* SiteController */
-Route::get('/', 'SiteController@home');
+#Route::get('/', 'SiteController@home');
+// Route::get('/', 'Auth\LoginController@showLoginForm');
+
+Route::match(['get', 'post'], '/contact', 'SiteController@contact')->name('contact');
 Route::get('/company','SiteController@company');
-Route::get('/careers','SiteController@careers');
-Route::get('/contact','SiteController@contact');
+// Route::contactget('/careers','SiteController@careers');
+// Route::get('/contact','SiteController@');
+Route::any('/enquieryform','KycController@enquieryform');
+Route::any('/bank-statement-analyser','SiteController@bankstatementanalyser');
 Route::get('/db_doc_collection','SiteController@db_doc_collection');
 Route::get('/debt_recovery','SiteController@debt_recovery');
 Route::get('/customer_verification','SiteController@customer_verification');
@@ -46,6 +58,9 @@ Route::get('/offline_aadhar','SiteController@offline_aadhar');
 Route::get('/multitenant','SiteController@aadhar_masking');
 Route::get('/blog', 'SiteController@blog');
 Route::get('blog/{post}','SiteController@show')->name('blog.show');
+
+Route::get('/upload', 'FileUploadController@showUploadForm')->name('upload.form');
+Route::post('/upload', 'FileUploadController@uploadFile')->name('upload.file');
 
 /*BillingController*/
 
@@ -68,6 +83,8 @@ Route::post('/billing/add_wallet_user','BillingController@addwalletuseramount')-
 
 /*ApiController*/
 Route::get('/apiList', 'ApiController@index')->name('api.list');
+Route::get('/sitechange', 'ApiController@websitechange')->name('api.sitechange'); 
+Route::post('/upload-site','ApiController@uploadsite')->name('upload.site');
 Route::get('/apiAdd', 'ApiController@add')->name('api.add');
 Route::post('/apiCreate','ApiController@create')->name('api.create');
 Route::post('/apiUpdate','ApiController@update')->name('api.update');
@@ -149,6 +166,7 @@ Route::any('/kyc/pancard_upload','KycController@pancard_upload')->name('kyc.panc
 Route::any('/kyc/pancard_details','KycController@pancard_details')->name('kyc.pancard.details');
 Route::any('kyc/pancard/ocr','KycController@pancard_ocr')->name('kyc.pancard.ocr');
 Route::any('/kyc/pancard_new_info','KycController@pancard_new_info')->name('kyc.pancard.new_info');
+Route::any('/kyc/script_tracing','KycController@script_tracing')->name('kyc.pancard.script_tracing');
 Route::any('kyc/pantogst','KycController@pantogst')->name('kyc.pantogst');
 Route::get('kyc/pantogst_api','KycController@pantogstapi')->name('kyc.pantogst_api');
 
@@ -181,6 +199,7 @@ Route::any('kyc/bank_verification', 'KycController@bank_verification')->name('ky
 Route::any('kyc/bank_ifsc','KycController@bank_verification_find_ifsc')->name('kyc.bank_ifsc');
 Route::any('kyc/bank_statement','KycController@bank_statement')->name('kyc.bank_statement');
 Route::any('kyc/bank_analyser','KycController@bank_analyser')->name('kyc.bank_analyser');
+
 
 /*Driving Licences */
 Route::any('/kyc/license/ocr','KycController@drivinglicense_ocr')->name('kyc.license_ocr');
@@ -307,7 +326,10 @@ Route::any('/kyc/searchkyc','KycController@searchkyc')->name('kyc.searchkyc');
 Route::any('/kyc/searchkyc_lite','KycController@searchkyclite')->name('kyc.searchkyc.lite');
 Route::any('/kyc/pancard_details','KycController@pancard_details')->name('kyc.pancard.details');
 Route::any('/kyc/ckycsearchadvance','KycController@ckycSearchAdvance')->name('kyc.ckycsearchadvance');
+Route::any('/kyc/ckyc_production','KycController@ckycSearchAdvance_production')->name('kyc.ckyc_production');
 Route::any('/kyc/ckysearch_advance_api','KycController@ckysearch_advance_api')->name('kyc.ckysearch_advance_api');
+Route::post('/ckyc/sendotp','KycController@sendOtp')->name('kyc.ckycsearchproduction');;
+Route::post('/ckyc/verifyotp','KycController@verifyOtp')->name('kyc.verifyOtp');
 Route::any('/kyc/ckycsearchdata','KycController@ckycsearchdata')->name('kyc.ckycsearchdata.lite');
 Route::any('/kyc/ckycsearch_api','KycController@ckycsearch_api')->name('kyc.ckycsearch_api');
 Route::any('/kyc/ckycdownload','KycController@ckycdownload')->name('kyc.ckycdownload.lite');
@@ -382,6 +404,7 @@ Route::post('failureResponse','PaymentController@failureResponse');
 /*******************Blog Route ******************************************/
 
 Route::get('/blog_dashboard','BlogController@dashboard')->name('blog_dashboard');
+Route::get('/blogs/{id}', 'SiteController@show')->name('blogs.show'); 
 Route::get('/blog_list','BlogController@blog')->name('blog_list');
 Route::get('/create','BlogController@createBlog')->name('create');
 Route::post('create-post','BlogController@createBlogSubmit');
@@ -514,7 +537,71 @@ Route::any('kyc/pancard_ocr_v2','KycController@pancardOcrv2')->name('kyc.pancard
 // Route::get('/demo', 'KycController@demoform')->name('demo');
 Route::any('/demo/rc','KycController@demoform')->name('kyc.deom');
 Route::any('/demo/pan','KycController@demopanform')->name('kyc.demo.pan');
+Route::get('/aadhaar/pdf-download/{client_id}', 'KycController@downloadPdf')->name('aadhaar.pdf');
 
+Route::any('/kyc/mobilename_info', 'KycController@mobilenamelookup')->name('kyc.mobilename_info');
+Route::any('/kyc/udyam_info', 'KycController@udyam_advanced_ui')->name('kyc.udyam_authentication');
+Route::any( '/kyc/email-otp', 'KycController@email_otp')  ->name('kyc.email_otp');
+
+Route::any('/kyc/verify-email-otp', 'KycController@verify_email_otp')->name('kyc.verify_email_otp');
+Route::any('/kyc/aadhar-pan-info', 'KycController@aadhar_validation')->name('kyc.aadhar_validation');
+Route::any('/kyc/pan-details', 'KycController@pandetails')
+    ->name('kyc.pan-details');
+      
+Route::any('kyc/pan-details-plus',  'KycController@pandetailsplus') ->name('kyc.pandetailsplus');
+Route::any('kyc/pan-details-v4',  'KycController@pandetailsv4')->name('kyc.pandetailsv4');
+Route::any('kyc/dl-validation',  'KycController@dl_validation3')->name('kyc.dl_validation');
+Route::any('kyc/rc-validate',  'KycController@rc_validate')->name('kyc.rc-validate');
+Route::any('kyc/dl-validate',  'KycController@dl_validate')->name('kyc.dl_validate');
+
+Route::any('kyc/pan-compliance',  'KycController@pan_compliance') ->name('kyc.pan-compliance');
+Route::any('kyc/upi-basic',  'KycController@upi_basic') ->name('kyc.upi-basic');
+Route::any('kyc/upi-basic-name', [KycController::class, 'upi_basic_name'])->name('kyc.upi_basic_name');
+    Route::match(['get', 'post'], '/kyc/gstin-authentication', [KycController::class, 'gstin_authentication_ui'])
+    ->name('kyc.gstin_authentication');
+ Route::match(['get', 'post'], '/kyc/gstin-advanced', [KycController::class, 'gstin_advanced_ui']) ->name('kyc.gstin_advanced');
+   Route::match(['get','post'], '/kyc/pan-aadhaar-link', [KycController::class,'pan_aadhaar_link_ui'])->name('kyc.pan_aadhaar_link');
+Route::any('/kyc/pan-to-fname', 'KycController@pan_to_fname_ui')  ->name('kyc.pan_to_fname');
+   
+Route::match(['get','post'], '/kyc/arm-verification', [KycController::class,'arm_verification'])->name('kyc.arm_verification');
+Route::match(['get','post'], '/kyc/pan-to-name', action: [KycController::class,'pan_to_name'])->name('kyc.pan_to_name');
+Route::any('kyc/upi-merchant',  'KycController@upi_merchant')->name('kyc.upi_merchant');
+Route::any('kyc/address-verification',  action: 'KycController@address_verification_ui')->name('kyc.address_verification');
+Route::any('kyc/upi-enhanced',  'KycController@upi_enhanced')->name('kyc.upi_enhanced');
+Route::any('kyc/company-to-name',  'KycController@company_to_pan')->name('kyc.company_to_pan');
+Route::any('kyc/rc-validation-three',  'KycController@rc_validationthree')->name('kyc.rc_validationthree');
+Route::any('kyc/employment-uan',  'KycController@employment_uan')->name('kyc.employment_uan');
+Route::any('kyc/employment-uan-v3',  'KycController@employment_uan_v3')->name('kyc.employment_uan_v3');
+Route::any('kyc/employment-uan-advanced-v2',  'KycController@employment_uan_advanced_v2')->name('kyc.employment_uan_advanced_v2');
+Route::any('kyc/mobile-prefill',  action: 'KycController@mobile_prefill')->name('kyc.mobile_prefill');
+Route::any('kyc/employment-uan-advanced-v3',  'KycController@employment_uan_advanced_v3')->name('kyc.uan_advanced');
+Route::any('kyc/whatsapp-number-check',  'KycController@whatsapp_number_check')->name('kyc.whatsapp_number_check');
+Route::any('kyc/whatsapp-advanced',  'KycController@whatsapp_advanced')->name('kyc.whatsapp_advanced');
+Route::any('kyc/contact-to-gst',  'KycController@contact_to_gst')->name('kyc.contact_to_gst');
+Route::any('kyc/gst-to-contacts',  'KycController@gst_to_contacts')->name('kyc.gst_to_contacts');
+Route::any('kyc/ecom-generate-url',  'KycController@ecom_generate_url')->name('kyc.ecom_generate_url');
+Route::any('kyc/ecom-url-username',  'KycController@ecom_url_username')->name('kyc.ecom_url_username');
+Route::any('kyc/ecom-generate-url-username',  'KycController@ecom_generate_url_username')->name('kyc.ecom_generate_url_username');
+Route::any('kyc/tan-to-company',  'KycController@tan_to_company')->name('kyc.tan_to_company');
+Route::any('/kyc/ecom-generate-url-order-duration', 'KycController@ecom_generate_url_order_duration')->name('kyc.ecom_generate_url_order_duration');
+Route::any('/kyc/mobile-upi-lookup', 'KycController@mobile_upi_lookup')->name('kyc.mobile_upi_lookup');
+Route::any('/kyc/mobile-upi-name', 'KycController@mobile_upi_name')->name('kyc.mobile_upi_name');
+Route::any('/kyc/ecom-website-list', 'KycController@ecom_websites_list')->name('kyc.ecom_websites_list');
+Route::any('/kyc/upi-basic-pan', 'KycController@upi_basic_pan')->name('kyc.upi_basic_pan');
+Route::any('/kyc/mobile-number-lookup', 'KycController@mobile_number_lookup')->name('kyc.mobile_number_lookup');
+Route::any('/kyc/pan-to-din', 'KycController@pan_to_din')->name('kyc.pan_to_din');
+Route::any('/kyc/upi-basic-pan-v4', 'KycController@uan_basic_pan_v4')->name('kyc.upi_basic_pan_v4');
+Route::any('/kyc/mobile-with-name-lookup', 'KycController@mobile_with_name_lookup')->name('kyc.mobile_name_lookup');
+Route::any('/kyc/mobile-porting-history', 'KycController@mobile_porting_history')->name('kyc.mobile_porting_history');
+Route::any('/kyc/mobile-customer-details', 'KycController@mobile_customer_details')->name('kyc.mobile_customer_details');
+Route::any('/kyc/mobile-vintage-lookup', 'KycController@mobile_vintage_lookup')->name('kyc.mobile_vintage_lookup');
+Route::any('/kyc/uan-basic-mobile-name', 'KycController@uan_basic_mobile')->name('kyc.uan_basic_mobile');
+Route::any('/kyc/uan-basic', 'KycController@uan_basic')->name('kyc.uan_basic');
+Route::any('/kyc/epfo-ev', 'KycController@epfo')->name('kyc.epfo');
+Route::any('/kyc/company-search-vone', 'KycController@company_search_v1')->name('kyc.company_search_vone');
+Route::any('/kyc/gstin-pan-search', 'KycController@gstin_pan_search')->name('kyc.gstin_pan_search');
+Route::any('/kyc/bank-ocr', 'KycController@bankPassbook_ocr')->name('kyc.bankpassbook_ocr');
+Route::any('/kyc/mobile-to-udyam', 'KycController@mobile_to_udyam_search')->name('kyc.mobile_to_udyam');
 
 Auth::routes([
 
@@ -527,6 +614,8 @@ Auth::routes([
     'email' => false
   
 ]);
+
+// URL::forceScheme('http'); 
 
 
 

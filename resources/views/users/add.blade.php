@@ -67,8 +67,8 @@
                                             <option value="apimaster">Api Master</option>
                                             <option value="report">Report</option>
                                             <option value="transactions">Transactions</option>
-                                            <option value="schemetypemaster">Scheme Type Master</option>   
-				                        </select>    
+                                            <option value="schemetypemaster">Scheme Type Master</option>
+				                        </select>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -99,11 +99,22 @@
                                     </div>
                                 </div>
                                 </div>
-                                <div class="col-md-4">
+                                 <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
                                     <label for="one_time_comission">One Time Comission (OTC)</label>
                                     <input type="text" class="form-control" id="one_time_comission" name="one_time_comission" placeholder="One Time Comission (OTC)">
+                                    </div>
                                 </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                    <label for="timezone">Time Zone</label>
+                                    <input type="number" class="form-control" id="timezone" name="timezone" placeholder="Enter timezone in Days">
+                                    </div>
+                                </div>
+                                 </div>
                             </div>
+
                             {{-- <button type="submit" class="btn btn-primary">Add</button> --}}
                         </div>
                     </form>
@@ -120,23 +131,23 @@
                         </div>
                         <div class="col-md-3">
                             <select name="plan" id="plan" class="form-control selectpicker" data-live-search="true" data-actions-box="true">
-                                <option value="">Select Plan</option>    
-                                <option value="basic">Basic Plan</option>		
-                                <option value="starter">Starter Plan</option>		
-                                <option value="standard">Standard Plan</option>		
-                                <option value="advance">Advance Plan</option>		
-                                <option value="growth">Growth Plan</option>		
-                                <option value="unicorn">Unicorn Plan</option>		
+                                <option value="">Select Plan</option>
+                                <option value="basic">Basic Plan</option>
+                                <option value="starter">Starter Plan</option>
+                                <option value="standard">Standard Plan</option>
+                                <option value="advance">Advance Plan</option>
+                                <option value="growth">Growth Plan</option>
+                                <option value="unicorn">Unicorn Plan</option>
                             </select>
                         </div>
-                        <div class="col-md-3">  
+                        <div class="col-md-3">
                             <input class="form-control" type="text" name="plan_duration" id="plan_duration" value="" placeholder="Plan Duration" disabled>
-                        </div> 
+                        </div>
                         <div class="col-md-3" style="padding-right: 15px;">
                             <input class="form-control" type="text" name="plan_amount" id="plan_amount" value="" placeholder="Plan Amount" disabled>
-                        </div>   
-                    </div>   
-                    <hr> 
+                        </div>
+                    </div>
+                    <hr>
                     <div class="form-group" id="demo">
                         <?php
                         if (Auth::user()->id != 1) {
@@ -146,7 +157,7 @@
                                 ->select('api_group.*')
                                 ->distinct()
                                 ->get();
-                               
+
                             }
                         ?>
                         @foreach($api_group as $key=>$value)
@@ -157,7 +168,7 @@
                                         <label for="grpchkdemo_{{$value->id}}" class="custom-control-label text-red">{{$value->group_name}}</label>
                                     </div>
                                 </div>
-                            </div>    
+                            </div>
                             <?php
                                 //$sub_menus=DB::table('api_master')->select('id','api_name', 'admin_price','api_group_id')->where('api_group_id',$value->id)->get();
                             ?>
@@ -168,7 +179,7 @@
                                       ->select('id', 'api_name', 'admin_price', 'api_group_id')
                                       ->where('api_group_id', $value->id)
                                       ->get();
-                                   
+
                               } else {
                                     $sub_menus = DB::table('user_scheme_master')
                                      ->join('api_master', 'api_master.id', '=', 'user_scheme_master.api_id')
@@ -176,7 +187,7 @@
                                       ->where('user_scheme_master.user_id', '=', Auth::user()->id)
                                       ->where('user_scheme_master.api_group_id', '=', $value->id)
                                       ->get(['user_scheme_master.*','api_master.*']);
-                                    
+
                                   }
                               ?>
                             @if(count($sub_menus)>0)
@@ -201,8 +212,8 @@
                                     </div>
                                 @endforeach
                             @endif
-                        @endforeach        
-                    </div> 
+                        @endforeach
+                    </div>
                     <div class="form-group" id="production">
                         <!-- <div class="row">
                             <div class="col-md-5"></div>
@@ -215,7 +226,7 @@
                                         <h6>Custom Range To</h6>
                                     </div>
                                 </div>
-                            </div>    
+                            </div>
                         </div> -->
                         <?php
                         if (Auth::user()->id != 1) {
@@ -254,7 +265,7 @@
                                         </div>
                                     </div>
                                 </div>     -->
-                            </div>    
+                            </div>
                             <?php
                              $sub_menus = null;
                                 if (Auth::user()->id == 1) {
@@ -281,20 +292,20 @@
                                                     <div class="col-md-5">
                                                         <input class="custom-control-input checkbox groupcheckbox_{{$sub_menu->api_group_id}}" type="checkbox" id="chk_{{$sub_menu->id}}_{{$sub_menu->api_group_id}}" name="chk_api_id" value="{{$sub_menu->id}}">
                                                         <label for="chk_{{$sub_menu->id}}_{{$sub_menu->api_group_id}}" class="custom-control-label">{{$sub_menu->api_name}}</label>
-                                                    </div>    
+                                                    </div>
                                                     <div class="col-md-7">
                                                         <select name="planType[]" id="planType_{{$sub_menu->id}}" class="planType form-control selectpicker multiselect" data-live-search="true" data-actions-box="true" multiple>
-                                                            <option value="regtech_plan">Regtech API Plan</option>		
-                                                            <option value="custom_plan">Custom Plan</option>		
+                                                            <option value="regtech_plan">Regtech API Plan</option>
+                                                            <option value="custom_plan">Custom Plan</option>
                                                         </select>
                                                     </div>
-                                                </div>    
+                                                </div>
                                             </div>
                                         </div>
                                         <div class="col-md-2 text-center" id="regtech_plan{{$sub_menu->id}}">
                                             <input type="text" class="form-control" id="txtPlanPrice{{$sub_menu->id}}" name="txtPlanPrice{{$sub_menu->id}}" value="" disabled>
                                         </div>
-                                        
+
                                         <div class="col-md-2 text-center" id="user_price{{$sub_menu->id}}">
                                             <input type="text" class="form-control grouptext_{{$sub_menu->api_group_id}}" id="txtUserPrice{{$sub_menu->id}}" disabled>
                                         </div>
@@ -325,7 +336,7 @@
                     </div>
                     <div class="text-center" id="submitButton">
                         <button type="button" id="btnAdd" class="btn btn-primary" style="width:40%; margin: 20px 0 20px 0">Add</button>
-                    </div>    
+                    </div>
                     <!-- </form> -->
                 </div>
             </div>
@@ -334,11 +345,11 @@
 @stop
 
 @section('custom_js')
-<script type="text/javascript" src="https://code.jquery.com/jquery-3.3.1.js"></script> 
+<script type="text/javascript" src="https://code.jquery.com/jquery-3.3.1.js"></script>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta2/dist/js/bootstrap-select.min.js"></script>
 <script>
-    
+
     $(document).ready(function() {
         var customRange = 0;
         $("#demo").hide();
@@ -360,7 +371,7 @@
                 if(data[i] == "custom_plan"){
                     $('#custom_plan'+res[1]).show();
                 }
-            } 
+            }
             if(data == ''){
                 $('#regtech_plan'+res[1]).show();
                 $('#user_price'+res[1]).show();
@@ -373,14 +384,14 @@
         $('#plan_duration_days').html('Plan Duration (0 Days)');
         var d = new Date();
         var currentDate = '';
-        
+
         if(d.getDate() < 10){
             if(d.getMonth() < 10){
                 currentDate = d.getFullYear() + "-" + '0'+(d.getMonth()+1) + "-" + '0'+d.getDate();
             }else{
                 currentDate = d.getFullYear() + "-" + (d.getMonth()+1) + "-" + '0'+d.getDate();
             }
-            
+
         }else{
             if(d.getMonth() < 10){
                 currentDate = d.getFullYear() + "-" + '0'+(d.getMonth()+1) + "-" + d.getDate();
@@ -388,7 +399,7 @@
                 currentDate = d.getFullYear() + "-" + (d.getMonth()+1) + "-" + d.getDate();
             }
         }
-        
+
         function calculatedays(ndays){
             var newdt = new Date();
             newdt.setDate(newdt.getDate() + parseInt(ndays));
@@ -404,7 +415,7 @@
                 newdate = newdate+'-'+newdt.getDate();
             }
             return newdate;
-        }    
+        }
 
         $('#plan').change(function(){
             regtechPlan = $(this).val();
@@ -470,14 +481,14 @@
                 }
             });
         });
-        
+
 		$("#btnAdd").click(function() {
-			var ids = ""; 
-			var delete_ids = ""; 
+			var ids = "";
+			var delete_ids = "";
 			var curid = "";
 			var flag = 0;
             var focusid = "";
-			
+
             var scheme_type = $("#scheme_type option:selected").val();
             var scheme_type_id = $("#scheme_type_id option:selected").val();
             var name = $.trim($("#name").val());
@@ -557,7 +568,7 @@
             // else {
             //     $("#one_time_comission").removeClass('is-invalid').addClass('is-valid');
             // }
-            
+
 			if(scheme_type=="production") {
                 $(document).find("input[name='chk_api_id']:checked").each(function() {
                     curid = $(this).attr("id");
@@ -565,10 +576,10 @@
                     var custom_plan = '';
                     var custom_plan_val = '';
                     var custom_range_val = '';
-                    
+
                     var plan_type = $("#planType_"+res[1]).val();
                     if(plan_type.indexOf("custom_plan") != -1){
-                        
+
                         var value = [];
                         var rangeValue = [];
                         for(var i=1;i<x;i++){
@@ -605,7 +616,7 @@
                     delete_ids = delete_ids + res[1] + ",";
                 });
                 delete_ids = delete_ids.replace(/,\s*$/, "");
-                
+
                 $("#delete_ids").val(delete_ids);
                 if(ids=="") {
                     alert('Please select at least 1 service');
@@ -681,7 +692,7 @@
                     $("#txtUserPricedemo"+res[1]).val('').prop('disabled',true);
                 }
             }
-            
+
             $('#customRange_to'+res[1]).change(function(){
                 if($(this).val() <= 100000){
                     var customPlanPrice = document.getElementById('customPlanPrice'+res[1]);
@@ -764,7 +775,7 @@
                     $(document).find(".grouptext_"+res[1]).val('').prop('disabled',true);
                 }
             }
-            
+
         });
 
         $(document).on("change",".groupcheckboxdemo", function() {
@@ -786,7 +797,7 @@
 
     var x = 2;
     function addRange(id){
-        var fieldHTML = '<div id="rangeDiv'+id+x+'" class="row" style="padding: 5px 0px"><div class="col-md-4"><input type="text" class="form-control customRange_from'+id+'" id="customRange_'+x+'_from'+id+'" name="customRange_'+x+'_from'+id+'" value="" placeholder="hits range from..."></div><div class="col-md-4"><input type="text" class="form-control customRange_to'+id+'" id="customRange_'+x+'_to'+id+'" name="customRange_'+x+'_to'+id+'" value="" placeholder="hits range upto..."></div><div class="col-md-2"><input type="text" class="form-control" id="customPlanPrice'+x+id+'" name="customPlanPrice'+x+id+'" value="" placeholder="Rs."></div><div class="col-md-2" style="padding-top:5px"><a href="javascript:void(0);" class="remove_button'+id+'" onclick="removeRange('+id+x+')"><i class="fa fa-fw fa-minus-circle"></i></a></div></div>'; //New input field html 
+        var fieldHTML = '<div id="rangeDiv'+id+x+'" class="row" style="padding: 5px 0px"><div class="col-md-4"><input type="text" class="form-control customRange_from'+id+'" id="customRange_'+x+'_from'+id+'" name="customRange_'+x+'_from'+id+'" value="" placeholder="hits range from..."></div><div class="col-md-4"><input type="text" class="form-control customRange_to'+id+'" id="customRange_'+x+'_to'+id+'" name="customRange_'+x+'_to'+id+'" value="" placeholder="hits range upto..."></div><div class="col-md-2"><input type="text" class="form-control" id="customPlanPrice'+x+id+'" name="customPlanPrice'+x+id+'" value="" placeholder="Rs."></div><div class="col-md-2" style="padding-top:5px"><a href="javascript:void(0);" class="remove_button'+id+'" onclick="removeRange('+id+x+')"><i class="fa fa-fw fa-minus-circle"></i></a></div></div>'; //New input field html
         x++;
         $('.field_wrapper'+id).append(fieldHTML);
     };

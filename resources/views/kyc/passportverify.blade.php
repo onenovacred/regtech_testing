@@ -12,13 +12,13 @@
         <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">Passport Verification</h3>
-                <a role = "button" class = "btn btn-light float-right" 
+                <a role = "button" class = "btn btn-light float-right"
                 href = "{{ route('kyc.passport_api') }}">Passport APIs</a>
             </div>
             <div class="card-body">
                 @if(isset($passportverify['statusCode']) && $passportverify['statusCode'] == '102')
                     <div class="alert alert-danger" role="alert">
-                        File Number is Invalid 
+                        File Number is Invalid
                   </div>
                 @endif
                 @if(isset($passportverify['statusCode']) && $passportverify['statusCode'] == '404' || null)
@@ -37,16 +37,16 @@
                             {{csrf_field()}}
                                 <div class="form-group">
                                     <label for="name">File Number</label>
-                                <input type="text" class="form-control"  
-                                    id="id_number" name="id_number" value="{{old('id_number')}}" 
+                                <input type="text" class="form-control"
+                                    id="id_number" name="id_number" value="{{old('id_number')}}"
                                     placeholder="Ex: PN1067476816213" required>
                                 </div>
                                 <div class="form-group">
                                     <label for="name">DOB</label>
-                                <input type="text" class="form-control" 
-                                    maxlength="10" minlength="10" 
-                                    id="dob" name="dob" value="{{old('dob')}}" 
-                                    placeholder="Ex: yyyy-mm-dd" required>
+                                <input type="text" class="form-control"
+                                    maxlength="10" minlength="10"
+                                    id="dob" name="dob" value="{{old('dob')}}"
+                                    placeholder="Ex: dd/mm/yyyy" required>
                                 </div>
                                 <button type="submit" class="btn btn-success offset-md-3">Verify</button>
                         </form><br>
@@ -65,12 +65,12 @@
                     <div class="col-md-12">
                       <div>
                       <p><b>Passport Verification {{ $passportverify['statusCode'] }} </b></p>
-                    
-                        <p>FileNumber: {{ $passportverify['Verification_Details']['response']['fileNumber'] }}</p>
-                        <p>full_name: {{ $passportverify['Verification_Details']['response']['name'] }}</p>
-                        <p>dob: {{ $passportverify['Verification_Details']['response']['dob'] }}</p>
-                        <p>date_of_application: {{ $passportverify['Verification_Details']['response']['applicationReceivedOnDate'] }}</p>
-                        <p>TypeOfApplication: {{ $passportverify['Verification_Details']['response']['typeOfApplication'] }}</p>
+
+                        <p>FileNumber: {{ $passportverify['Verification_Details']['result']['file_number'] }}</p>
+                        <p>full_name: {{ $passportverify['Verification_Details']['result']['given_name'] }}</p>
+                        <p>dob: {{ $passportverify['Verification_Details']['result']['dob'] }}</p>
+                        <p>date_of_application: {{ $passportverify['Verification_Details']['result']['application_date'] }}</p>
+                        <p>TypeOfApplication: {{ $passportverify['Verification_Details']['result']['application_type'] }}</p>
                       </div>
                     </div>
                 </div>
@@ -78,7 +78,7 @@
             </div>
         @endif
 
-        @if(!empty($passportverify) && $passportverify['statusCode'] == '422')
+        {{-- @if(!empty($passportverify) && $passportverify['statusCode'] == '422')
             <div class = "card card-danger">
                 <div class = "card-header">
                     <h3 class = "card-title">Passport Verification Details</h3>
@@ -100,7 +100,7 @@
                 </div>
                 </div>
             </div>
-        @endif
+        @endif --}}
 @stop
 
 

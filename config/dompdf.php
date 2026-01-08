@@ -45,6 +45,8 @@ return array(
          * Times-Roman, Times-Bold, Times-BoldItalic, Times-Italic,
          * Symbol, ZapfDingbats.
          */
+        'remote_enabled' => true,
+'chroot' => base_path(),
         "font_dir" => storage_path('fonts'), // advised by dompdf (https://github.com/dompdf/dompdf/pull/782)
 
         /**

@@ -93,7 +93,7 @@
                                 <p><strong>Chassis Number:</strong> {{ $rc_validation['rc_validation']['data']['vehicle_chasi_number'] }}</p>
                                 <p><strong>Registration Date:</strong> {{ $rc_validation['rc_validation']['data']['registration_date'] }}</p>
                                 <p><strong>Manufacturing Date:</strong> {{ $rc_validation['rc_validation']['data']['manufacturing_date'] }}</p>
-                                <p><strong>Registered At:</strong> {{ $rc_validation['rc_validation']['data']['registered_at'] }}</p>
+                                <p><strong>RTO Code:</strong> {{ $rc_validation['rc_validation']['data']['rto_code'] }}</p> 
                                 <p><strong>Maker Model:</strong> {{$rc_validation['rc_validation']['data']['maker_model']}}</p>
                                 <p><strong>Fuel Type:</strong> {{$rc_validation['rc_validation']['data']['fuel_type']}}</p>
                                 <p><strong>Color:</strong> {{$rc_validation['rc_validation']['data']['color']}}</p>
@@ -132,7 +132,7 @@
                                 <p><strong>insurance_policy_number:</strong>{{ $rc_validation['rc_validation']['data']['insurance_policy_number' ] }}</p>
                                 <p><strong>insurance_upto:</strong>{{ $rc_validation['rc_validation']['data']['insurance_upto' ] }}</p>
                                 <p><strong>manufacturing_date:</strong>{{ $rc_validation['rc_validation']['data']['manufacturing_date' ] }}</p>
-                                <p><strong>registered_at:</strong>{{ $rc_validation['rc_validation']['data']['registered_at' ] }}</p>
+                               
                                 <p><strong>latest_by:</strong>{{ $rc_validation['rc_validation']['data']['latest_by' ] }}</p>
                                 <p><strong>tax_upto:</strong>{{ $rc_validation['rc_validation']['data']['tax_upto' ] }}</p>
                                 <p><strong>cubic_capacity:</strong>{{ $rc_validation['rc_validation']['data']['cubic_capacity' ] }}</p>

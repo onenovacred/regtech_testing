@@ -37,19 +37,26 @@ Route::post('corporate_gst_return','ApiController2@corporate_gst_return');
 Route::post('corporate_gst_requestotp','ApiController2@corporate_gst_requestotp');
 Route::post('gst_authentication', 'ApiController2@gst_authentication');
 Route::post('license_validation','ApiController2@license_validation');
-Route::post('bank_verification','ApiController2@bank_verification');
+// Route::post('bank_verification','ApiController2@bank_verification');
+Route::post('bank_verification','ApiController2@bank_verification_latest');
 Route::post('bank_statment','ApiController2@bank_statment');
 Route::post('bank_details', 'ApiController2@bank_details');
 Route::post('bank_detailspdf','ApiController2@bank_detailspdf');
 Route::post('bank_anlyser','ApiController2@bank_anlyser');
+Route::get('bank_anlyser_result', 'ApiController2@get_bank_analysis_result');
 Route::post('bank_anlyser_psd','ApiController2@bank_anlyser_usd');
 Route::post('rc_validationmp', 'ApiController2@rc_validation');
 // Route::post('rc_validation','ApiController2@rc_validationwithemptra');
-Route::post('rc_validation','ApiController2@rc_validationwithemptranew');
+
+
+Route::post('rc_validation','ApiController2@rc_validationwithemptranew'); 
+// Route::post('rc_validation','ApiController2@rc_validationwithemptranew10_09_2025');
+Route::post('rc_validation10septnew','ApiController2@rc_validationwithemptranew10_09_2025');
 Route::post('rc_validationcheck','ApiController2@rc_check');
 // Route::post('rc_validationnew','ApiController2@rc_validationwithemptra');
 Route::post('rc_validation_short','ApiController2@rc_validation_chessi');
 Route::post('rc_validationlite', 'ApiController2@rc_validation_new_lite');
+Route::post('download_ckyc','ApiController2@ckycSearchdownload');
 // Route::post('rc_validation_test','ApiController2@rc_validation_test');
 // Route::post('rc_validation_test12','ApiController2@rc_validation_test12');
 Route::post('rc_test','ApiController2@rc_test');
@@ -73,6 +80,7 @@ Route::post('ckycDownload','ApiController2@ckycSearchdatadownload');
 Route::post('payment','ApiController2@payment');
 Route::post('driving_upload','ApiController2@driving_upload');
 Route::post('voter_validation_may2023','ApiController2@voter_validation');
+Route::post('voter-validation','ApiController2@voter_validation1');
 Route::post('voter_validation','ApiController2@voter_validation_new');
 Route::post('voter_upload','ApiController2@voter_upload');
 //Route::post('creditreport','ApiController2@equifax']);
@@ -86,6 +94,7 @@ Route::post('epfo','ApiController2@epfo_new');
 Route::post('uan','ApiController2@uan_details');
 Route::post('company_search','ApiController2@company_search');
 Route::post('company_details','ApiController2@company_details');
+Route::post('company-search-v1','ApiController2@company_search_v1');
 
 //NEW CHANGES
 Route::post('passport_verification','ApiController2@passport_verification');
@@ -100,6 +109,7 @@ Route::any('shopestablishment','ApiController2@shopestablishment');
 
 //creating new equifax api
 Route::post('ecredit','ApiController2@equifaxurl');
+Route::post('script_tracing','ApiController2@script_tracing'); 
 Route::post('ecrediturl','ApiController2@equifaxurlnewtest');
 Route::post('ecredit_score','ApiController2@equifaxurlscoreonly');
 Route::post('ecreditsendOTP','ApiController2@equifaxsendOTP');
@@ -119,6 +129,8 @@ Route::post('face_match1','ApiController2@face_match1');
 Route::post('upi_validation','ApiController2@upi_validation');
 Route::post('gstin_pan_confidence_old','ApiController2@gstin_pan_confidence');
 Route::post('gstin_pan_confidence','ApiController2@gstin_pan_confidence_new');  
+Route::post('mobile-to-udyam','ApiController2@mobile_to_udyam');  
+Route::post('uan-get-otp','ApiController2@uan_passbook_get_otp');  
 
 //for Udyam
 Route::post('signyzytoken','ApiController2@signyzytoken'); 
@@ -136,7 +148,12 @@ Route::post('enach-payment-failure','ENachPaymentController@failurePayment');
 Route::post('ecreditv2','ApiController2@equifaxwithpdf');
 Route::post('ecreditv3','ApiController2@equifaxdevelopment');
 //Route::post('searchadvance','ApiController2@ckycSearchNew')->name('searchadvance');
-Route::post('ckyc_searchadvance','ApiController2@ckycSearchNew')->name('ckyc_searchadvance');
+// Route::post('ckyc_searchadvance','ApiController2@ckycSearchNew')->name('ckyc_searchadvance');
+Route::post('ckyc_searchadvance','ApiController2@ckycSearchdownload');
+Route::post('ckyc_sendotp','ApiController2@ckycSearchdownload_production');
+Route::post('ckyc_verifycOtp_prod','ApiController2@validateCkycOtp_digitap');
+Route::post('cky_sendotp_prod','ApiController2@ckycSearchdownloadProduction');
+
 
 //***********************Bhunaksha****************************
 Route::post('bhunaksha','ApiController2@bhunaksha')->name('bhunaksha');
@@ -188,13 +205,13 @@ Route::post('extract_driving_text','ApiController3@drivingLicenseExtract')->name
 Route::post('extract_aadharcard_text','ApiController3@aadharCardExtract')->name('aadharExtract');
 Route::post('predictppl','ApiController3@predictppl');
 /* wire api easebuzzz */
-Route::post('/transfers/initiate','PaymentTransforController@initiateTransaction');
-Route::post('/login','LoginApiController@login');
+// Route::post('/transfers/initiate','PaymentTransforController@initiateTransaction');
+// Route::post('/login','LoginApiController@login');
 /*Users Apis*/
 Route::get('/scheme_types','UserApiController@scheme_types');
 Route::get('/apimenu/{group_id}','UserApiController@apimenu');
 Route::get('/users','UserApiController@users');
-Route::get('/admin','UserApiController@admin_user');
+Route::get('/admin',action: 'UserApiController@admin_user');
 
 /*Edit User */
 
@@ -203,17 +220,80 @@ Route::post('newaadhar', 'ApiController3@new_aadhar');
 Route::post('newrcvalidation', 'ApiController3@new_rc_validationwithemptranew');
 Route::post('newpanocr', 'ApiController3@new_pan_ocr');
 
+Route::post('mobile-name-lookup','ApiController2@mobile_name_lookup');
 
+Route::post('mobile-prefill','ApiController2@mobile_prefill');
+Route::post('udyam-authentication','ApiController2@udyamAuthenticationBasic');
+// Route::post('email_validation','ApiController2@email_id');
+// Route::post('email_validation','ApiController2@email_id');
+Route::post('send-email-otp','ApiController2@sendEmailOtp');
+Route::post('verify-email-otp','ApiController2@verifyEmailOtp');
+// Route::post('aadhar-validation','ApiController2@aadhar_validation');
+Route::post('mobile-validation','ApiController2@mobile_validation');
+Route::post('email-validation','ApiController2@email_id');
+Route::post('aadharvalidate','ApiController2@aadharValidation');
+Route::post('pan-validation', 'ApiController2@pancard_validation');
+Route::post('pan-validation-plus', 'ApiController2@pancard_validation_plus');
+Route::post('pandetails-v4','ApiController2@pandetails_v4');
+Route::post('rc-validation','ApiController2@rc_validations');
+Route::post('dl-validation','ApiController2@dl_validation');
+Route::post('aadhar-to-pan','ApiController2@aadhaar_to_masked_pan');
+Route::post('rc-validation','ApiController2@rc_validate');
+Route::post('pan-compliance','ApiController2@pan_compliance');
+Route::post('epfo-ev','ApiController2@epfo_ev');
+Route::post('upi-basic','ApiController2@upi_basic');
+Route::post('upi-basic-name','ApiController2@upi_basic_name');
+Route::post('gstin-authentication','ApiController2@gstin_authentication');
+Route::post('gstin-advanced','ApiController2@gstin_advanced');
+Route::post('pan-aadhaar','ApiController2@pan_aadhaar_link');
+Route::post('pan-fname','ApiController2@pan_to_fname');
+Route::post('pan-name','ApiController2@pan_to_name');
+Route::post('arm-verification','ApiController2@arm_verification');
+Route::post('upi-merchant','ApiController2@upi_merchant');
+Route::post('rc-validationthree','ApiController2@rc_validationthree');
+Route::post('address-verification','ApiController2@address_verification');
+Route::post('upi-enhanced','ApiController2@upi_enhanced');
+Route::post('company-to-pan','ApiController2@company_to_pan');
+Route::post('tds-quarterly','ApiController2@tds_quarterly');
+Route::post('employment-uan','ApiController2@employment_uan');
+Route::post('dl-validation-v3','ApiController2@dl_validation_v3');
+Route::post('employment-uan-v3','ApiController2@employment_uan_v3');
+
+Route::post('driving-license-three',action: 'ApiController2@driving_license_three');
+Route::post('employment-uan-v4','ApiController2@employment_uan_v4');
+Route::post('employment-uan-v5','ApiController2@employment_uan_v5');
+Route::post('employment-uan-advanced-v2','ApiController2@employment_uan_advanced_v2');
+Route::post('employment-uan-advanced-v3','ApiController2@employment_uan_advanced_v3');
+Route::post('whatsapp-number-check','ApiController2@whatsapp_number_check');
+Route::post('whatsapp-advanced','ApiController2@whatsapp_advanced');
+Route::post('contact-to-gst','ApiController2@contact_to_gst');
+Route::post('gst-to-contacts','ApiController2@gst_to_contacts');
+Route::post('ecom-generate-url','ApiController2@ecom_generate_url');
+Route::post('ecom-url-username','ApiController2@ecom_url_username');
+Route::post('ecom-generate-url-username',action: 'ApiController2@ecom_generate_url_username');
+Route::post('tan-to-comapny','ApiController2@tan_to_company');
+Route::post('ecom-url-order-duration','ApiController2@ecom_url_order_duration');
+Route::get('ecom-websites-list','ApiController2@ecom_websites_list');
+Route::post('mobile-upi-lookup','ApiController2@mobile_upi_lookup');
+Route::post('mobile-upi-name','ApiController2@mobile_upi_name');
+Route::post('uan-basic-pan','ApiController2@uan_basic_pan');
+Route::post('uan-basic-pan-v4','ApiController2@uan_basic_pan_v4');
+Route::post('pan-to-din','ApiController2@pan_to_din');
+Route::post('mobile-with-name-lookup','ApiController2@mobile_with_name_lookup');
+Route::post('mobile-number-lookup','ApiController2@mobile_number_lookup');
+Route::post('mobile-porting-history','ApiController2@mobile_lookup_porting_history');
+Route::post('mobile-customer_details','ApiController2@mobile_lookup_customer_details');
+Route::post('mobile-vintage-lookup','ApiController2@mobile_vintage_lookup');
+Route::post('uan-mobile-name','ApiController2@uan_basic_mobile_name');
+Route::post('uan-basic-mobile','ApiController2@uan_basic_mobile');
+Route::post('gstin-pan-search','ApiController2@gstin_pan_search');
+Route::post('bank-ocr','ApiController2@bankPassbookOcr');
+Route::post('cheque-ocr','ApiController2@chequeOcr');
 
 // KYC
 // 1. Aadhar
 // Route::post('aadharvalidation', 'KycController1@aadharValidation');
 // Route::post('aadhaarupload', 'KycController1@aadhaarUpload');
-
-
-
-
-
 
 // Routes for frontend request
 Route::get('apimaster/{token}', 'ApiController4@getapimaster');
@@ -278,8 +358,12 @@ Route::get('/get-details/{id}', 'ServiceRequestController@getDetails');
 // Search Data
 Route::get('search/data','SearchDataController1@searchall');
 Route::post('search_all','SearchDataController1@searchallData');
-Route::post('search_all/pagination','SearchDataControlle1@pagination');
+Route::post('search_all/pagination','SearchDataController1@pagination');
 Route::post('export/data','SearchDataController1@downloadExcel');
+
+
+
+
 
 //itr
 Route::post('itrinitiate', 'ItrController1@itr_initiate');
@@ -300,14 +384,14 @@ Route::post('/sendotp', 'CrifController1@sendOTP');
 Route::post('/verifyotp', 'CrifController1@verifyotp');
 
 // BHUNAKSHA DATA
-Route::get('/jharkhandData', 'BhunakshaController@jharkhandData');
-Route::get('/biharData', 'BhunakshaController@biharData');
-Route::get('/chhattisgarhData', 'BhunakshaController@chhattisgarhData');
-Route::get('/rajasthanData', 'BhunakshaController@rajasthanData');
-Route::get('/lakshadweepData', 'BhunakshaController@lakshadweepData');
-Route::get('/keralaData', 'BhunakshaController@keralaData');
-Route::get('/goaData', 'BhunakshaController@goaData');
-Route::get('/odishaData', 'BhunakshaController@odishaData');
+// Route::get('/jharkhandData', 'BhunakshaController@jharkhandData');
+// Route::get('/biharData', 'BhunakshaController@biharData');
+// Route::get('/chhattisgarhData', 'BhunakshaController@chhattisgarhData');
+// Route::get('/rajasthanData', 'BhunakshaController@rajasthanData');
+// Route::get('/lakshadweepData', 'BhunakshaController@lakshadweepData');
+// Route::get('/keralaData', 'BhunakshaController@keralaData');
+// Route::get('/goaData', 'BhunakshaController@goaData');
+// Route::get('/odishaData', 'BhunakshaController@odishaData');
 
 
 Route::get('search-table','SearchDataController1@search');
@@ -321,7 +405,9 @@ Route::post('esign-xml','EsignController@GenerateEsignXml2');
 Route::post('sendxml','EsignController@sendxml');
 Route::get('getsign/{id}/{sign_method}','EsignController@getSignDocument2');
 Route::post('getSignDocument','EsignController@getSignDocument');
+Route::post('contact-us','SiteController@contact');
 
 Route::get('update-column','SearchDataController1@updateTableTypes');
 
 Route::post('test-maheen','SearchDataController1@testMaheen');
+Route::get('get-expired-user','ApiController2@getAllExpiredUsers');

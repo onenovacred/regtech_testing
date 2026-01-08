@@ -19,13 +19,45 @@ class ApiController extends Controller
     	return view('api.list', compact('api_group'));
     }
 
+    public function websitechange() { 
+    	$api_group = ApiGroup::all();
+    	return view('api.website');
+    }
+
+    public function uploadsite(Request $request)
+    {
+        $request->validate([
+            'indexFile' => 'required|file|mimes:html,htm|max:5120', // max 5MB
+        ]);
+
+        $file = $request->file('indexFile');
+
+        // Define destination path
+        $destinationPath = '/var/www/html/index.html';
+
+        try {
+            // Backup old file (optional)
+            if (file_exists($destinationPath)) {
+                copy($destinationPath, '/var/www/html/index_backup_' . date('Ymd_His') . '.html');
+            }
+
+            // Move new file
+            $file->move('/var/www/html', 'index.html');
+
+            return back()->with('success', 'index.html replaced successfully!');
+        } catch (\Exception $e) {
+            return back()->with('error', 'Failed to upload: ' . $e->getMessage());
+        }
+    }
+
+
     public function add() {
         $api_group = ApiGroup::all();
         return view('api.add', compact('api_group'));
     }
 
     public function create(Request $request) {
-        dd($request->all());
+        // dd($request->all());
         $is_api_master = ApiMaster::where('api_slug',$request->api_slug)->count();
     	if($is_api_master==0)
         {

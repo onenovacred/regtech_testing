@@ -11,9 +11,10 @@
     <div class="col-md-6 offset-md-3">
         <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">PAN CARD INFO.</h3>
-                <a role = "button" class = "btn btn-light float-right" 
-                href = "{{ route('kyc.pancard_api') }}">Pan Card APIs</a>
+                <!-- <h3 class="card-title">PAN CARD INFO.</h3> -->
+                 <h3 class="card-title">Pan Details</h3>
+                <!-- <a role = "button" class = "btn btn-light float-right" 
+                href = "{{ route('kyc.pancard_api') }}">Pan Card APIs</a> -->
             </div>
             <div class="card-body">
                 @if(isset($pancard['statusCode']) && $pancard['statusCode'] == 102)

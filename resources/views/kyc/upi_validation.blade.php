@@ -4,7 +4,7 @@
 
 @section('content_header')
 <style>
-		
+
     table{
         width:100%;
     }
@@ -14,7 +14,7 @@
         color:black;
         height:20px;
         table-layout: fixed;
-        -webkit-font-smoothing: antialiased;	
+        -webkit-font-smoothing: antialiased;
     }
 
 </style>
@@ -49,20 +49,20 @@
                             {{csrf_field()}}
                             <div class="form-group">
                                 <label for="name">Name<span style="color:red">*</span></label>
-                                <input type="text" class="form-control" 
-                                id="name" name="name" value="" 
+                                <input type="text" class="form-control"
+                                id="name" name="name" value=""
                                 placeholder="Enter Name" required>
                             </div>
                             <div class="form-group">
                                 <label for="name">UPI ID<span style="color:red">*</span></label>
-                                <input type="text" class="form-control" 
-                                id="upi_id" name="upi_id" value="" 
+                                <input type="text" class="form-control"
+                                id="upi_id" name="upi_id" value=""
                                 placeholder="Enter upi id" required>
                             </div>
                             <div class="form-group">
                                 <label for="name">Order ID</label>
-                                <input type="text" class="form-control" 
-                                id="order_id" name="order_id" value="" 
+                                <input type="text" class="form-control"
+                                id="order_id" name="order_id" value=""
                                 placeholder="Enter order id">
                             </div>
                             <button type="submit" class="btn btn-success">Submit</button>
@@ -74,7 +74,7 @@
         @if(!empty($upidetails['upidetails']) && $upidetails['statusCode'] == 200)
         <div class="card card-success">
             <div class="card-header">
-                <h3 class="card-title">PAN CARD Details</h3>
+                <h3 class="card-title">UPI Details</h3>
             </div>
             <div class="card-body">
                 <div class="row">
@@ -83,15 +83,15 @@
                         <p><b>Order ID:</b> {{$upidetails['upidetails']['response']['orderId']}}</p>
                         <p><b>Name:</b> {{$upidetails['upidetails']['response']['account_details']['beneficiary_name']}}</p>
                         <p><b>UPI Id:</b> {{$upidetails['upidetails']['response']['account_details']['beneficiary_vpa']}}</p>
-                        <p><b>Account Status:</b> {{$upidetails['upidetails']['response']['account_details']['account_status']}}</p>
-                        <!-- <p>PAN Verification: @if(isset($pancard[0]['pancard']['message'][0])) $pancard[0]['pancard']['message'][0] @endif</p> -->
+                        {{-- <p><b>Account Status:</b> {{$upidetails['upidetails']['response']['account_details']['account_status']}}</p> --}}
+                        {{-- <!-- <p>PAN Verification: @if(isset($pancard[0]['pancard']['message'][0])) $pancard[0]['pancard']['message'][0] @endif</p> --> --}}
                       </div>
                     </div>
                 </div>
             </div>
         </div>
-        
-        @endif   
+
+        @endif
     </div>
 </div>
 @stop

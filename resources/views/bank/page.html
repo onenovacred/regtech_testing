@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Statement Analyser | AI-Powered Financial Analysis | RegTech API</title>
+    <meta name="description" content="Automate your financial analysis with our AI-powered Bank Statement Analyser. Extract insights, detect anomalies, and streamline lending decisions.">
+    <meta name="keywords" content="bank statement analyser, financial analysis, loan processing, income verification, expense tracking, transaction categorization, banking API, fintech solutions">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #1a4f8b;
+            --primary-dark: #0f3a6b;
+            --secondary: #4caf50;
+            --accent: #ff9800;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --light-gray: #e9ecef;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Open Sans', sans-serif;
+            color: var(--dark);
+            line-height: 1.6;
+            background-color: #fff;
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--primary);
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+        }
+        
+        h2 {
+            font-size: 2rem;
+        }
+        
+        h3 {
+            font-size: 1.5rem;
+        }
+        
+        p {
+            margin-bottom: 1rem;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+        
+        .section-heading {
+            text-align: center;
+            max-width: 800px;
+            margin: 0 auto 2rem;
+        }
+        
+        /* Header Styles */
+        header {
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            padding: 10px 0;
+        }
+        
+        .header-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 5px 0;
+            position: relative;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            margin-bottom: 10px;
+        }
+        
+        .logo-image {
+            height: 70px; /* Increased logo size */
+            width: auto;
+            transition: all 0.3s ease;
+        }
+        
+        .logo:hover .logo-image {
+            transform: scale(1.05);
+        }
+        
+        .logo-text {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700;
+            font-size: 1.8rem;
+            color: var(--primary);
+            margin-left: 10px;
+        }
+        
+        nav {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+        
+        nav ul {
+            display: flex;
+            list-style: none;
+            justify-content: center;
+        }
+        
+        nav ul li {
+            margin: 0 15px;
+        }
+        
+        nav ul li a {
+            text-decoration: none;
+            color: var(--dark);
+            font-weight: 500;
+            transition: color 0.3s;
+            position: relative;
+            font-size: 1.1rem;
+        }
+        
+        nav ul li a:after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: -5px;
+            left: 0;
+            background-color: var(--primary);
+            transition: width 0.3s;
+        }
+        
+        nav ul li a:hover {
+            color: var(--primary);
+        }
+        
+        nav ul li a:hover:after {
+            width: 100%;
+        }
+        
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--primary);
+            position: absolute;
+            right: 15px;
+            top: 25px;
+        }
+        
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 80px 0;
+            text-align: center;
+        }
+        
+        .hero-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .hero h1 {
+            color: white;
+            margin-bottom: 1.5rem;
+        }
+        
+        .hero p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background-color: var(--accent);
+            color: white;
+            padding: 12px 30px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .cta-button:hover {
+            background-color: #e68900;
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Logo Showcase Section */
+        .logo-section {
+            padding: 80px 0;
+            background-color: var(--light);
+            text-align: center;
+        }
+        
+        .logo-large {
+            margin-bottom: 30px;
+        }
+        
+        .logo-large img {
+            max-width: 300px;
+            height: auto;
+        }
+        
+        /* Features Section */
+        .features {
+            padding: 80px 0;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 50px;
+        }
+        
+        .feature-card {
+            background-color: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+            text-align: center;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .feature-icon {
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin-bottom: 20px;
+        }
+        
+        /* Services Carousel */
+        .services {
+            padding: 80px 0;
+            background-color: var(--light);
+        }
+        
+        .services-carousel {
+            position: relative;
+            overflow: hidden;
+            padding: 20px 0;
+        }
+        
+        .services-track {
+            display: flex;
+            animation: carousel-scroll 30s linear infinite;
+            width: calc(250px * 20);
+        }
+        
+        .service-item {
+            width: 250px;
+            flex-shrink: 0;
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            margin: 0 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s;
+        }
+        
+        .service-item:hover {
+            transform: scale(1.05);
+        }
+        
+        .service-icon {
+            font-size: 2rem;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+        
+        @keyframes carousel-scroll {
+            0% {
+                transform: translateX(0);
+            }
+            100% {
+                transform: translateX(calc(-250px * 10));
+            }
+        }
+        
+        /* Demo Form Section */
+        .demo-form {
+            padding: 80px 0;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+        }
+        
+        .demo-form h2 {
+            color: white;
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        
+        .form-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.1);
+        }
+        
+        .form-container form {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group label {
+            color: var(--dark);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 12px 15px;
+            border: 1px solid var(--light-gray);
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(26, 79, 139, 0.2);
+        }
+        
+        .form-container button[type="submit"] {
+            margin-top: 10px;
+            background-color: var(--accent);
+            color: white;
+        }
+        
+        /* Contact Section */
+        .contact {
+            padding: 80px 0;
+            text-align: center;
+        }
+        
+        .contact-info {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 40px;
+            margin-top: 50px;
+        }
+        
+        .contact-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .contact-icon {
+            font-size: 2rem;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+        
+        /* Footer */
+        footer {
+            background-color: var(--dark);
+            color: white;
+            padding: 60px 0 30px;
+        }
+        
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+        
+        .footer-column h3 {
+            color: white;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+        }
+        
+        .footer-column ul {
+            list-style: none;
+        }
+        
+        .footer-column ul li {
+            margin-bottom: 10px;
+        }
+        
+        .footer-column ul li a {
+            color: #ccc;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        
+        .footer-column ul li a:hover {
+            color: white;
+        }
+        
+        .copyright {
+            text-align: center;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 992px) {
+            h1 {
+                font-size: 2.2rem;
+            }
+            
+            h2 {
+                font-size: 1.8rem;
+            }
+            
+            nav ul {
+                display: none;
+                flex-direction: column;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                width: 100%;
+                background-color: white;
+                box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+                padding: 20px;
+                z-index: 1000;
+            }
+            
+            nav ul.show {
+                display: flex;
+            }
+            
+            nav ul li {
+                margin: 10px 0;
+                text-align: center;
+            }
+            
+            .mobile-menu-btn {
+                display: block;
+            }
+            
+            .logo-image {
+                height: 60px;
+            }
+            
+            .logo-text {
+                font-size: 1.6rem;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .hero {
+                padding: 60px 0;
+            }
+            
+            .hero p {
+                font-size: 1.1rem;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-container {
+                padding: 30px 20px;
+            }
+            
+            .contact-info {
+                flex-direction: column;
+                gap: 30px;
+            }
+            
+            .logo-image {
+                height: 50px;
+            }
+            
+            .logo-text {
+                font-size: 1.4rem;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            h1 {
+                font-size: 2rem;
+            }
+            
+            h2 {
+                font-size: 1.6rem;
+            }
+            
+            .hero p {
+                font-size: 1rem;
+            }
+            
+            .feature-card {
+                padding: 20px;
+            }
+            
+            .logo-large img {
+                max-width: 200px;
+            }
+            
+            .logo-text {
+                font-size: 1.2rem;
+            }
+            
+            .logo-image {
+                height: 45px;
+            }
+            
+            .header-container {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+            }
+            
+            .logo {
+                margin-bottom: 0;
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+            
+            .logo-text {
+                margin-left: 0;
+                margin-top: 5px;
+            }
+            
+            nav {
+                position: static;
+            }
+            
+            .mobile-menu-btn {
+                position: static;
+            }
+        }
+    </style>
+
+
+
+    <!-- Header Section -->
+    <header>
+        <div class="container header-container">
+            <a href="#" class="logo">
+                <img 
+                    class="logo-image" 
+                    src="https://i.postimg.cc/DwrD60c1/Whats-App-Image-2025-09-02-at-12-54-24-PM-removebg-preview.png" 
+                    alt="RegTech Logo"
+                >
+                <span class="logo-text">RegTech API</span>
+            </a>
+            <nav>
+                <ul id="navMenu">
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#services">Services</a></li>
+                    <li><a href="#demo">Request Demo</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                    <li><a href="https://regtechapi.in/">About Us</a></li>
+                </ul>
+                <button class="mobile-menu-btn" id="mobileMenuBtn">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container hero-content">
+            <h1>AI-Powered Bank Statement Analysis</h1>
+            <p>Transform raw bank statements into actionable insights with our advanced analysis technology. Automate financial verification, detect anomalies, and streamline decision-making.</p>
+            <a href="#demo" class="cta-button">Request a Demo</a>
+        </div>
+    </section>
+
+    <!-- Logo Showcase Section -->
+    <section class="logo-section">
+        <div class="container">
+            <div class="section-heading">
+                <h2>Trusted by Financial Institutions Nationwide</h2>
+                <p>Our advanced APIs power the next generation of financial technology solutions</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-heading">
+                <h2>Powerful Features for Financial Analysis</h2>
+                <p>Our Bank Statement Analyser provides comprehensive insights from bank statements to drive better financial decisions.</p>
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-file-invoice-dollar"></i>
+                    </div>
+                    <h3>Transaction Categorization</h3>
+                    <p>Automatically categorizes income and expenses for better financial tracking and analysis.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <h3>Income Verification</h3>
+                    <p>Accurately verify regular income patterns and identify irregular cash flows.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3>Anomaly Detection</h3>
+                    <p>Identify suspicious transactions, NSF checks, and unusual financial activities.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-calculator"></i>
+                    </div>
+                    <h3>Cash Flow Analysis</h3>
+                    <p>Generate detailed cash flow reports with balance trends and financial health indicators.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-university"></i>
+                    </div>
+                    <h3>Multi-Bank Support</h3>
+                    <p>Works with statements from all major banks and financial institutions.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3>Secure Processing</h3>
+                    <p>Bank-level security with end-to-end encryption for all your financial data.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services Carousel -->
+    <section class="services" id="services">
+        <div class="container">
+            <div class="section-heading">
+                <h2>Our Comprehensive RegTech Solutions</h2>
+                <p>Explore our full suite of verification and compliance APIs</p>
+            </div>
+            
+            <div class="services-carousel">
+                <div class="services-track">
+                    <!-- Service items will be duplicated by JavaScript for infinite effect -->
+                    <div class="service-item">
+                        <div class="service-icon">
+                            <i class="fas fa-id-card"></i>
+                        </div>
+                        <h4>Aadhaar Validation</h4>
+                    </div>
+                    
+                    <div class="service-item">
+                        <div class="service-icon">
+                            <i class="fas fa-address-card"></i>
+                        </div>
+                        <h4>PAN Validation</h4>
+                    </div>
+                    
+                    <div class="service-item">
+                        <div class="service-icon">
+                            <i class="fas fa-mask"></i>
+                        </div>
+                        <h4>Aadhaar Masking</h4>
+                    </div>
+                    
+                    <div class="service-item">
+                        <div class="service-icon">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <h4>CKYC</h4>
+                    </div>
+                    
+                    <div class="service-item">
+                        <div class="service-icon">
+                            <i class="fas fa-file-invoice"></i>
+                        </div>
+                        <h4>Bank Statement Analyser</h4>
+                    </div>
+                    
+                    <div class="service-item">
+                        <div class="service-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h4>GSTIN Verification</h4>
+                    </div>
+                    
+                    <div class="service-item">
+                        <div class="service-icon">
+                            <i class="fas fa-university"></i>
+                        </div>
+                        <h4>Bank Account Verification</h4>
+                    </div>
+                    
+                    <div class="service-item">
+                        <div class="service-icon">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        <h4>Credit Report</h4>
+                    </div>
+                    
+                    <div class="service-item">
+                        <div class="service-icon">
+                            <i class="fas fa-id-card"></i>
+                        </div>
+                        <h4>Driving License Validation</h4>
+                    </div>
+                    
+                    <div class="service-item">
+                        <div class="service-icon">
+                            <i class="fas fa-vote-yea"></i>
+                        </div>
+                        <h4>Voter ID Validation</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Form Section -->
+    <section class="demo-form" id="demo">
+        <div class="container">
+            <h2>Request a Demo</h2>
+            <div class="form-container">
+                <form id="demoRequestForm">
+                    <div class="form-group">
+                        <label for="name">Full Name</label>
+                        <input type="text" id="name" name="name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">Email Address</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="company">Company Name</label>
+                        <input type="text" id="company" name="company" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="phone">Phone Number</label>
+                        <input type="tel" id="phone" name="phone" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="preferred-date">Preferred Demo Date</label>
+                        <input type="date" id="preferred-date" name="preferred-date">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="message">Message (Optional)</label>
+                        <textarea id="message" name="message" rows="3"></textarea>
+                    </div>
+                    
+                    <button type="submit" class="cta-button">Schedule a Demo</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section class="contact" id="contact">
+        <div class="container">
+            <div class="section-heading">
+                <h2>Contact Us</h2>
+                <p>Have questions or need more information? Get in touch with our team.</p>
+            </div>
+            
+            <div class="contact-info">
+                <div class="contact-item">
+                    <div class="contact-icon">
+                        <i class="fas fa-envelope"></i>
+                    </div>
+                    <h4>Email</h4>
+                    <p>marketing@regtechapi.in</p>
+                </div>
+                
+                <div class="contact-item">
+                    <div class="contact-icon">
+                        <i class="fas fa-phone"></i>
+                    </div>
+                    <h4>Phone</h4>
+                    <p>+91 84700 67555 <br>+91 80809 87605</p>
+                </div>
+                
+                <div class="contact-item">
+                    <div class="contact-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <h4>Business Hours</h4>
+                    <p>Mon - Fri: 9AM - 6PM</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-column">
+                    <div class="logo-large">
+                        <!-- Large RegTech API Logo -->
+                        <svg width="200" height="80" viewBox="0 0 300 100">
+                            <!-- Card background -->
+                            <rect width="300" height="100" fill="#d9d9d9" rx="10" />
+
+                            <!-- Logo inside the card -->
+                            <image 
+                                href="https://i.postimg.cc/DwrD60c1/Whats-App-Image-2025-09-02-at-12-54-24-PM-removebg-preview.png"
+                                x="72" y="-10" 
+                                height="120" width="160"
+                                preserveAspectRatio="xMidYMid meet"
+                            />
+                        </svg>
+
+                        <p>
+                            Providing cutting-edge regulatory technology solutions for businesses of all sizes.
+                        </p>
+                    </div>
+
+                    <div class="footer-address">
+                        <strong>Address:</strong><br>
+                        114, B Wing, 1st Floor,<br>
+                        Soho by Panchshil,<br>
+                        Wagholi, Pune,<br>
+                        Maharashtra - 412207, India
+                    </div>
+                </div>
+                
+                <div class="footer-column">
+                    <h3>Quick Links</h3>
+                    <ul>
+                        <li><a href="#features">Features</a></li>
+                        <li><a href="#services">Services</a></li>
+                        <li><a href="#demo">Request Demo</a></li>
+                        <li><a href="#contact">Contact Us</a></li>
+                        <li><a href="https://docboyz.in/privacy_policy/RegtechApi_privacy_policy.html">Privacy Policy</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-column">
+                    <h3>Services</h3>
+                    <ul>
+                        <li><a href="https://regtechapi.in/">Aadhaar Validation</a></li>
+                        <li><a href="https://regtechapi.in/">PAN Validation</a></li>
+                        <li><a href="https://regtechapi.in/">Bank Statement Analysis</a></li>
+                        <li><a href="https://regtechapi.in/">View All Services</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-column">
+                    <h3>Connect With Us</h3>
+                    <ul>
+                        <li><a href="https://regtechapi.in/">LinkedIn</a></li>
+                        <li><a href="https://regtechapi.in/">Twitter</a></li>
+                        <li><a href="https://regtechapi.in/">Facebook</a></li>
+                        <li><a href="https://regtechapi.in/">Instagram</a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="copyright">
+                <p>&copy; 2025 RegTech API. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Form submission handling
+        document.getElementById('demoRequestForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form values
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const company = document.getElementById('company').value;
+            const phone = document.getElementById('phone').value;
+            const preferredDate = document.getElementById('preferred-date').value;
+            const message = document.getElementById('message').value;
+            
+            // Prepare email content
+            const subject = `Demo Request for Bank Statement Analyser - ${company}`;
+            const body = `Name: ${name}%0D%0AEmail: ${email}%0D%0ACompany: ${company}%0D%0APhone: ${phone}%0D%0APreferred Date: ${preferredDate}%0D%0AMessage: ${message}`;
+            
+            // Open email client
+            window.location.href = `mailto:marketing@regtechapi.in?subject=${subject}&body=${body}`;
+            
+            // Show success message
+            alert('Thank you for your demo request! We will contact you shortly.');
+            this.reset();
+        });
+        
+        // Duplicate service items for infinite carousel effect
+        document.addEventListener('DOMContentLoaded', function() {
+            const servicesTrack = document.querySelector('.services-track');
+            const servicesHTML = servicesTrack.innerHTML;
+            servicesTrack.innerHTML = servicesHTML + servicesHTML;
+        });
+        
+        // Mobile menu toggle
+        document.getElementById('mobileMenuBtn').addEventListener('click', function() {
+            const nav = document.getElementById('navMenu');
+            nav.classList.toggle('show');
+        });
+        
+        // Set minimum date for calendar to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('preferred-date').setAttribute('min', today);
+        
+        // Close mobile menu when clicking on a link
+        document.querySelectorAll('nav a').forEach(link => {
+            link.addEventListener('click', () => {
+                document.getElementById('navMenu').classList.remove('show');
+            });
+        });
+    </script>

@@ -19,28 +19,28 @@
                   @if (isset($pantogstDetails['statusCode']) && $pantogstDetails['statusCode'] == 102)
                     <div class="alert alert-danger" role="alert">
                           {{$error_message}}
-                    </div>  
+                    </div>
                    @endif
                    @if (isset($pantogstDetails['statusCode']) && $pantogstDetails['statusCode'] ==103)
                    <div class="alert alert-danger" role="alert">
                          {{$error_message}}
-                   </div>  
+                   </div>
                    @endif
-                   
+
                    @if(isset($pantogstDetails[0]['statusCode']) && $pantogstDetails[0]['statusCode']==403)
                    <div class="alert alert-danger" role="alert">
                          {{$error_message}}
-                   </div>  
+                   </div>
                    @endif
                    @if(isset($pantogstDetails[0]['statusCode']) && $pantogstDetails[0]['statusCode']==404)
                    <div class="alert alert-danger" role="alert">
                          {{$error_message}}
-                   </div>  
+                   </div>
                    @endif
                    @if(isset($pangststatusCode) && $pangststatusCode==500)
                    <div class="alert alert-danger" role="alert">
                          Internal Server Error.
-                   </div>  
+                   </div>
                    @endif
                     <div class="row">
                         <div class="col-md-6 offset-md-3">
@@ -67,7 +67,31 @@
                         <div class="row">
                             <div class="col-md-12">
                                 <div class="">
-                                    <table class = "table text-center table-responsive table-bordered" cellspacing="0">
+
+                                    <table class="table text-center table-responsive table-bordered" cellspacing="0">
+    <thead>
+        <tr class="card-header">
+            <th scope="col" style="border-radius: 0.25rem 0 0 0 !important;">GSTIN</th>
+            <th scope="col">Auth Status</th>
+            <th scope="col">State Code</th>
+            <th scope="col">State</th>
+        </tr>
+    </thead>
+    <tbody>
+        @if(isset($pantogstDetails['response']))
+            @foreach($pantogstDetails['response'] as $data)
+                <tr class="td-elements">
+                    <td>{{ $data['gstin'] ?? 'null' }}</td>
+                    <td>{{ $data['authStatus'] ?? 'null' }}</td>
+                    <td>{{ $data['stateCd'] ?? 'null' }}</td>
+                    <td>{{ $data['state'] ?? 'null' }}</td>
+                </tr>
+            @endforeach
+        @endif
+    </tbody>
+</table>
+
+                                    {{-- <table class = "table text-center table-responsive table-bordered" cellspacing="0">
                                      <thead>
                                         <tr class = "card-header">
                                             <th scope = "col" style="border-radius: 0.25rem 0 0 0 !important;">stjCd</th>
@@ -113,10 +137,10 @@
                                         @endforeach
                                     @endif
                                 </tbody>
-                                </table>
-                                   <h4 class="text-center text-muted"><strong>Address</strong></h4>
-                                   <hr/>
-                                   <table class = "table text-center table-responsive table-bordered" cellspacing="0">
+                                </table> --}}
+                                   {{-- <h4 class="text-center text-muted"><strong>Address</strong></h4>
+                                   <hr/> --}}
+                                   {{-- <table class = "table text-center table-responsive table-bordered" cellspacing="0">
                                     <thead>
                                        <tr class = "card-header">
                                            <th scope = "col">BNM</th>
@@ -157,7 +181,7 @@
                                        @endforeach
                                    @endif
                                </tbody>
-                               </table>
+                               </table> --}}
                                 </div>
                             </div>
                         </div>

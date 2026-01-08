@@ -9,6 +9,15 @@
                 <!--Grid column-->
                 <div class="col-lg-3 col-md-6 mb-4 mb-md-3 mb-lg-0">
                     <h4 class="font-weight-bold">Contact Details</h4>
+                    <!-- Place below this section inside Contact Details list -->
+                    <li>
+                        <a href="https://wa.me/918470067555" target="_blank" class="text-white d-flex align-items-center mt-2">
+                            <i class="fab fa-whatsapp" style="font-size: 20px; margin-right: 8px;"></i>
+                            <span>Chat with us on WhatsApp</span>
+                        </a>
+                    </li>
+
+
 
                     <ul class="list-unstyled mb-0">
                     <li>
@@ -24,27 +33,27 @@
                         Kalyani Nagar, Pune, <br>
                         Maharashtra - 411006, India</span>
                     </li> -->
-                    <li>
+                    <!-- <li>
                         <p></p>
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-telephone-fill" viewBox="0 0 16 16">
                             <path fill-rule="evenodd" d="M1.885.511a1.745 1.745 0 0 1 2.61.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.678.678 0 0 0 .178.643l2.457 2.457a.678.678 0 0 0 .644.178l2.189-.547a1.745 1.745 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.634 18.634 0 0 1-7.01-4.42 18.634 18.634 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877L1.885.511z"/>
                         </svg>
-                        <span>+91 7766969646</span>
+                        <span>084700 67555</span>
                     </li>
                     <li>
                         <p></p>
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-phone-vibrate-fill" viewBox="0 0 16 16">
                             <path d="M4 4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4zm5 7a1 1 0 1 0-2 0 1 1 0 0 0 2 0zM1.807 4.734a.5.5 0 1 0-.884-.468A7.967 7.967 0 0 0 0 8c0 1.347.334 2.618.923 3.734a.5.5 0 1 0 .884-.468A6.967 6.967 0 0 1 1 8c0-1.18.292-2.292.807-3.266zm13.27-.468a.5.5 0 0 0-.884.468C14.708 5.708 15 6.819 15 8c0 1.18-.292 2.292-.807 3.266a.5.5 0 0 0 .884.468A7.967 7.967 0 0 0 16 8a7.967 7.967 0 0 0-.923-3.734zM3.34 6.182a.5.5 0 1 0-.93-.364A5.986 5.986 0 0 0 2 8c0 .769.145 1.505.41 2.182a.5.5 0 1 0 .93-.364A4.986 4.986 0 0 1 3 8c0-.642.12-1.255.34-1.818zm10.25-.364a.5.5 0 0 0-.93.364c.22.563.34 1.176.34 1.818 0 .642-.12 1.255-.34 1.818a.5.5 0 0 0 .93.364C13.856 9.505 14 8.769 14 8c0-.769-.145-1.505-.41-2.182z"/>
                         </svg>
-                        <span>+91 8080987605</span>
-                    </li>
-                    <li>
+                        <span>080809 87605</span>
+                    </li> -->
+                    <!-- <li>
                         <p></p>
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-envelope-fill" viewBox="0 0 16 16">
                             <path d="M.05 3.555A2 2 0 0 1 2 2h12a2 2 0 0 1 1.95 1.555L8 8.414.05 3.555zM0 4.697v7.104l5.803-3.558L0 4.697zM6.761 8.83l-6.57 4.027A2 2 0 0 0 2 14h12a2 2 0 0 0 1.808-1.144l-6.57-4.027L8 9.586l-1.239-.757zm3.436-.586L16 11.801V4.697l-5.803 3.546z"/>
                         </svg>
-                        <a href="mailto:info@docboyz.in" class="text-white">info@docboyz.in</a>
-                    </li>
+                        <a href="mailto:info@docboyz.in" class="text-white">info@regtechapi.in</a>
+                    </li> -->
                     <!-- <li>
                         <p></p>
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-phone" viewBox="0 0 16 16">
@@ -58,10 +67,24 @@
                 <!--Grid column-->
 
                 <!--Grid column-->
-                <div class="col-lg-3 col-md-6 mb-4 mb-md-3 mb-lg-0">
-                    <h4 class="font-weight-bold">Our Services</h4>
+               <div class="col-lg-3 col-md-6 mb-4 mb-md-3 mb-lg-0">
+                    <!-- <h4 class="font-weight-bold">Our Services</h4> -->
 
-                    <ul class="list-unstyled mb-0">
+                    <ul class="list-unstyled mb-0"> 
+                        <li>
+                        <p></p>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-telephone-fill" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M1.885.511a1.745 1.745 0 0 1 2.61.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.678.678 0 0 0 .178.643l2.457 2.457a.678.678 0 0 0 .644.178l2.189-.547a1.745 1.745 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.634 18.634 0 0 1-7.01-4.42 18.634 18.634 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877L1.885.511z"/>
+                        </svg>
+                        <span>084700 67555</span>
+                    </li>
+                    <li>
+                        <p></p>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-phone-vibrate-fill" viewBox="0 0 16 16">
+                            <path d="M4 4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4zm5 7a1 1 0 1 0-2 0 1 1 0 0 0 2 0zM1.807 4.734a.5.5 0 1 0-.884-.468A7.967 7.967 0 0 0 0 8c0 1.347.334 2.618.923 3.734a.5.5 0 1 0 .884-.468A6.967 6.967 0 0 1 1 8c0-1.18.292-2.292.807-3.266zm13.27-.468a.5.5 0 0 0-.884.468C14.708 5.708 15 6.819 15 8c0 1.18-.292 2.292-.807 3.266a.5.5 0 0 0 .884.468A7.967 7.967 0 0 0 16 8a7.967 7.967 0 0 0-.923-3.734zM3.34 6.182a.5.5 0 1 0-.93-.364A5.986 5.986 0 0 0 2 8c0 .769.145 1.505.41 2.182a.5.5 0 1 0 .93-.364A4.986 4.986 0 0 1 3 8c0-.642.12-1.255.34-1.818zm10.25-.364a.5.5 0 0 0-.93.364c.22.563.34 1.176.34 1.818 0 .642-.12 1.255-.34 1.818a.5.5 0 0 0 .93.364C13.856 9.505 14 8.769 14 8c0-.769-.145-1.505-.41-2.182z"/>
+                        </svg>
+                        <span>080809 87605</span>
+                    </li>
                     <!-- <li class="p-1">
 
                         <span>&#10093;</span>
@@ -79,17 +102,17 @@
                         <a href="{{ url('/customer_verification') }}" class="text-white">Reg Tech API</a>
                     </li> -->
 
-                    <li class="p-1">
+                    <!-- <li class="p-1">
                         <span>&#10093;</span>
                         <a href="{{ url('/customer_verification#enach') }}" class="text-white">e-Nach/e-Mandate</a>
-                    </li>
+                    </li> -->
 
                     <!-- <li class="p-1">
                         <span>&#10093;</span>
                         <a href="{{ url('/debt_recovery#multitenant') }}" class="text-white">Multi Tenant</a>
                     </li> -->
 
-                    <li class="p-1">
+                    <!-- <li class="p-1">
                         <span>&#10093;</span>
                         <a href="{{ url('/customer_verification#bank') }}" class="text-white">Bank Account Verification</a>
                     </li>
@@ -109,7 +132,7 @@
                 <!--Grid column-->
 
                 <!--Grid column-->
-                <div class="col-lg-3 col-md-6 mb-4 mb-md-3 mb-lg-0">
+                <!-- <div class="col-lg-3 col-md-6 mb-4 mb-md-3 mb-lg-0">
                     <h4 class="font-weight-bold">Postman & API</h4>
 
                     <ul class="list-unstyled mb-0">
@@ -141,12 +164,16 @@
                             <span>&#10093;</span>
                             <a href="{{ url('/customer_verification#db_fmatch') }}" class="text-white">DB Fmatch</a>
                         </li>
+                         <li class="p-1">
+                            <span>&#10093;</span>
+                            <a href="{{ url('/bank-statement-analyser') }}" class="text-white">Bank Analyser</a>
+                        </li>
                     </ul>
-                </div>
+                </div> -->
                 <!--Grid column-->
 
                 <!--Grid column-->
-                <div class="col-lg-3 col-md-6 mb-md-3 mb-lg-0">
+                <!-- <div class="col-lg-3 col-md-6 mb-md-3 mb-lg-0">
                     <h4 class="font-weight-bold">Quick Links</h4>
 
                     <ul class="list-unstyled mb-0">
@@ -174,9 +201,13 @@
                         <span>&#10093;</span>
                         <a href="{{ url('/company') }}" class="text-white">Industries We Serve</a>
                     </li>
+                     <li class="p-1">
+                        <span>&#10093;</span>
+                        <a href="https://docboyz.in/privacy_policy/RegtechApi_privacy_policy.html" class="text-white">Privacy Policy</a>
+                    </li>
                     </ul>
 
-                </div>
+                </div> --> 
                 <!--Grid column-->
                 </div>
                 <!--Grid row-->
@@ -189,7 +220,7 @@
         <div class="pl-sm-4 pl-md-5 pt-3 pb-1" style="background-color: rgba(0, 0, 0, 0.2);">
             <div class="container pl-5 row">
                 <div class="col-sm-6">
-                    <p class="text-left text-md-center text-lg-left">© 2021 All Rights Resrved by RegTech</p>
+                    <p class="text-left text-md-center text-lg-left">© 2025 All Rights Resrved by RegTech</p>
                 </div>
                 <div class="col-sm-6">
                     <p class="text-sm-left text-md-center text-lg-right">Designed & Devloped by RegTech</p>

@@ -48,40 +48,48 @@
             </div>
         </div>
 
-        @if(!empty($aadhaar_masking) && isset($aadhaar_masking[0]['aadhaar_masked_details']['status_code']) && $aadhaar_masking[0]['aadhaar_masked_details']['status_code'] == 200)
+        @if(!empty($aadhaar_masking))
         <div class="card card-success">
-            <div class="card-header">
-                <h3 class="card-title">Aadhar Details</h3>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-12">
-                      <div>
-                        <p><strong>Aadhar Number: </strong>{{ $aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][0]['aadhaar_number']['value'] }}</p>
-                        <p><strong>Full Name: </strong>{{ $aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][0]['full_name']['value'] }}</p>
-                        <p><strong>Gender: </strong>{{ $aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][0]['gender']['value'] }}</p>
-                        <p><strong>DOB: </strong>{{ $aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][0]['dob']['value'] }}</p>
-                        @if(isset($aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][1]))
-                            <p><strong>Address: </strong>{{ $aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][1]['address']['value'] }}</p>
-                            <p><strong>City: </strong>{{ $aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][1]['address']['city'] }}</p>
-                            <p><strong>State: </strong>{{ $aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][1]['address']['state'] }}</p>
-                            <p><strong>Pincode: </strong>{{ $aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][1]['address']['zip'] }}</p>
-                        @endif
-                        @if(isset($aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][1]['masked_image']))
-                            <p><strong>Masked Aadhar Front -</strong></p>
-                        @else
-                            <p><strong>Masked Aadhar -</strong></p>
-                        @endif
-                        <img src="{{$aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][0]['masked_image']}}" style="width: 100%">
-                        @if(isset($aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][1]['masked_image']))
-                        <p style="margin-top:10px;"><strong>Masked Aadhar Back -</strong></p>
-                        <img src="{{$aadhaar_masking[0]['aadhaar_masked_details']['data']['ocr_fields'][1]['masked_image']}}" style="width: 100%">
-                        @endif
-                      </div>
+        <div class="card-header">
+            <h3 class="card-title">Aadhar Details</h3>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-12">
+                    <div>
+                        <p><strong>Masked Aadhar -</strong></p>
+                        
+                        @php
+                            $base64 = $aadhaar_masking[0]['aadhaar_masked_details']['files'][0]['masked_image_base64']; 
+                            
+                            // Check for image type based on the starting characters of the Base64 string
+                            if (strpos($base64, 'iVBORw0KGgo') === 0) {
+                                // PNG (Base64 PNG strings usually start with 'iVBORw0KGgo')
+                                $imageType = 'image/png';
+                            } elseif (strpos($base64, '/9j/') === 0) {
+                                // JPEG (Base64 JPEG strings usually start with '/9j/')
+                                $imageType = 'image/jpeg';
+                            } elseif (strpos($base64, 'R0lGODlh') === 0) {
+                                // GIF (Base64 GIF strings usually start with 'R0lGODlh')
+                                $imageType = 'image/gif';
+                            } elseif (strpos($base64, 'UklGR') === 0) {
+                                // WebP (Base64 WebP strings usually start with 'UklGR')
+                                $imageType = 'image/webp';
+                            } elseif (strpos($base64, '<?xml') === 0) {
+                                // SVG (Base64 SVG strings usually start with '<?xml')
+                                $imageType = 'image/svg+xml';
+                            } else {
+                                // Default to JPEG if the type is unknown
+                                $imageType = 'image/jpeg'; 
+                            }
+                        @endphp
+
+                        <img src="data:{{ $imageType }};base64,{{$base64}}" style="width: 100%">
                     </div>
                 </div>
             </div>
         </div>
+    </div>
         @endif
     </div>
 </div>

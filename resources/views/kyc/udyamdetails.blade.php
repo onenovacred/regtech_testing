@@ -12,13 +12,13 @@
         <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">Udyam Registration Search.</h3>
-                <a role = "button" class = "btn btn-light float-right" 
+                <a role = "button" class = "btn btn-light float-right"
                 href = "{{ route('kyc.udyam_api') }}">Udyam Card APIs</a>
             </div>
             <div class="card-body">
                 @if(isset($udyamcard['statusCode']) && $udyamcard['statusCode'] == '102')
                     <div class="alert alert-danger" role="alert">
-                        Udyam Number is Invalid 
+                        Udyam Number is Invalid
                   </div>
                 @endif
                 @if(isset($udyamcard['statusCode']) && ($udyamcard['statusCode'] == '404'))
@@ -26,7 +26,7 @@
                     Server Error. Please try again later.
                 </div>
                 @endif
-                @if(isset($udyamcard['statusCode']) && $udyamcard['statusCode'] == '500') 
+                @if(isset($udyamcard['statusCode']) && $udyamcard['statusCode'] == '500')
                     <div class="alert alert-danger" role="alert">
                         Internal Server Error. Please contact techsupport@docboyz.in. for more details.
                   </div>
@@ -37,9 +37,9 @@
                             {{csrf_field()}}
                                 <div class="form-group">
                                     <label for="name">Udyam Number</label>
-                                <input type="text" class="form-control" 
-                                    maxlength="20" minlength="10" 
-                                    id="udyam_number" name="udyam_number" value="{{old('udyam_number')}}"       
+                                <input type="text" class="form-control"
+                                    maxlength="20" minlength="10"
+                                    id="udyam_number" name="udyam_number" value="{{old('udyam_number')}}"
                                     placeholder="Ex: ABCDE1234N" required>
                                 </div>
                                 <button type="submit" class="btn btn-success">Verify</button>
@@ -49,7 +49,8 @@
             </div>
         </div>
 
-        @if(!empty($udyamcard) &&  isset($udyamcard['statusCode']) && $udyamcard['statusCode'] == 200)
+
+        @if(!empty($udyamcard) &&  isset($udyamcard['status_code']) && $udyamcard['status_code'] == 200)
         <div class="card card-success">
             <div class="card-header">
                 <h3 class="card-title">Udyam details</h3>
@@ -58,7 +59,82 @@
                 <div class="row">
                     <div class="col-md-12">
                       <div>
-                        <p><strong>UdyamNumber: </strong>{{$udyamcard['response']['essentials']['udyamNumber'] }}</p>
+<p><strong>UdyamNumber: </strong>{{ $udyamcard['response']['udyam_reg_no'] }}</p>
+<p><strong>Date Of Registration: </strong>{{ $udyamcard['response']['date_of_reg'] }}</p>
+<p><strong>DIC: </strong>{{ $udyamcard['response']['district_industries_center'] }}</p>
+<p><strong>MSME DFO: </strong>{{ $udyamcard['response']['msme_dfo'] }}</p>
+
+{{-- Profile --}}
+<p><strong>Enterprise Name: </strong>{{ $udyamcard['response']['profile']['enterprise_name'] }}</p>
+<p><strong>Enterprise Type: </strong>{{ $udyamcard['response']['profile']['enterprise_type'] }}</p>
+<p><strong>Major Activity: </strong>{{ $udyamcard['response']['profile']['major_activity'] }}</p>
+<p><strong>Organisation Type: </strong>{{ $udyamcard['response']['profile']['organization_type'] }}</p>
+<p><strong>Social Category: </strong>{{ $udyamcard['response']['profile']['social_category'] }}</p>
+<p><strong>Date Of Incorporation: </strong>{{ $udyamcard['response']['profile']['date_of_incorporation'] }}</p>
+<p><strong>Date Of Commencement: </strong>{{ $udyamcard['response']['profile']['date_of_commencement'] ?? 'N/A' }}</p>
+
+{{-- Official Address --}}
+<p><strong>Official Address:</strong><br>
+    {{ $udyamcard['response']['official_address']['flat'] }},
+    {{ $udyamcard['response']['official_address']['premises'] }},
+    {{ $udyamcard['response']['official_address']['village'] }},
+    {{ $udyamcard['response']['official_address']['block'] }},
+    {{ $udyamcard['response']['official_address']['road'] }},
+    {{ $udyamcard['response']['official_address']['city'] }},
+    {{ $udyamcard['response']['official_address']['district'] }},
+    {{ $udyamcard['response']['official_address']['state'] }} -
+    {{ $udyamcard['response']['official_address']['pincode'] }}
+</p>
+<p><strong>Email: </strong>{{ $udyamcard['response']['official_address']['email'] }}</p>
+<p><strong>Mobile: </strong>{{ $udyamcard['response']['official_address']['mobile'] }}</p>
+
+{{-- Branch Details --}}
+@if(!empty($udyamcard['response']['branch_details']))
+    <p><strong>Branch Details:</strong></p>
+    <ul>
+        @foreach($udyamcard['response']['branch_details'] as $branch)
+            <li>
+                {{ $branch['name'] }} -
+                {{ $branch['flat'] }}, {{ $branch['premises'] }}, {{ $branch['village'] }},
+                {{ $branch['block'] }}, {{ $branch['road'] }},
+                {{ $branch['city'] }}, {{ $branch['district'] }},
+                {{ $branch['state'] }} - {{ $branch['pincode'] }}
+            </li>
+        @endforeach
+    </ul>
+@endif
+
+{{-- Industry --}}
+@if(!empty($udyamcard['response']['industry']))
+    <p><strong>Industry Details:</strong></p>
+    <ul>
+        @foreach($udyamcard['response']['industry'] as $ind)
+            <li>
+                <strong>{{ $ind['industry'] }}</strong><br>
+                Sub Sector: {{ $ind['sub_sector'] }}<br>
+                Activity: {{ $ind['activity'] }}<br>
+                Description: {{ $ind['activity_description'] }}<br>
+                Industry Code: {{ $ind['industry_code'] }}<br>
+                Sub Sector Code: {{ $ind['sub_sector_code'] }}<br>
+                NIC Code: {{ $ind['nic_code'] }}<br>
+                Date: {{ $ind['date'] }}
+            </li>
+        @endforeach
+    </ul>
+@endif
+
+{{-- Enterprise Type History --}}
+@if(!empty($udyamcard['response']['enterprise_type_history']))
+    <p><strong>Enterprise Type History:</strong></p>
+    <ul>
+        @foreach($udyamcard['response']['enterprise_type_history'] as $history)
+            <li>{{ $history['classification_year'] }} - {{ $history['enterprise_type'] }} ({{ $history['classification_date'] }})</li>
+        @endforeach
+    </ul>
+@endif
+
+
+                        {{-- <p><strong>UdyamNumber: </strong>{{$udyamcard['response']['udyam_reg_no'] }}</p>
                         <p><strong>Id: </strong>{{$udyamcard['response']['id']}}</p>
                         <p><strong>PatronId: </strong>{{$udyamcard['response']['patronId']}}</p>
                         <p><strong>udyamRegistrationNumber: </strong>{{$udyamcard['response']['result']['generalInfo']['udyamRegistrationNumber']}}</p>
@@ -77,7 +153,7 @@
                         <p><strong>district:</strong>{{$udyamcard['response']['result']['officialAddressOfEnterprise']['district']}}</p>
                         <p><strong>city:</strong>{{$udyamcard['response']['result']['officialAddressOfEnterprise']['city']}}</p>
                         <p><strong>pincode:</strong>{{$udyamcard['response']['result']['officialAddressOfEnterprise']['pin']}}</p>
-                        <p><strong>email:</strong>{{$udyamcard['response']['result']['officialAddressOfEnterprise']['email']}}</p>
+                        <p><strong>email:</strong>{{$udyamcard['response']['result']['officialAddressOfEnterprise']['email']}}</p> --}}
                       </div>
                     </div>
                 </div>

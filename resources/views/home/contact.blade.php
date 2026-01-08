@@ -11,6 +11,17 @@
     ])
 
     <div class="container p-5">
+                @if(session('success'))
+                <div class="alert alert-success" role="alert">
+                       {{ session('success') }}
+                    </div>
+                @endif
+
+                @if(session('error'))
+                    <div class="alert alert-danger" role="alert">
+                       {{ session('error') }}
+                    </div>
+                @endif
 
         <div class="row">
 
@@ -37,11 +48,11 @@
                         <span>CIN: U72900PN2018PTC180125</span><br>
                         <span>GSTIN: 27AABCZ2858B1ZC</span>
                         </br>
-                        
+
                         </br>
                         <span class="font-weight-bold">Mumbai:</span>
                         </br>
-                        
+
                         C-106 Kanishka
                         GE Links CHS, Ram Mandir Road
                         Goregaon West,
@@ -55,7 +66,7 @@
                         </svg>
                     </div>
                     <div class="col-9 pt-4 lead">
-                        <span> <span class="font-weight-bold">Customers: </span> +91 7766969646</span>
+                        <span> <span class="font-weight-bold">Customers: </span> +91 8470067555</span>
                     </div>
 
                     <div class="col-2 pt-4 text-right">
@@ -125,7 +136,7 @@
                     <div class="card">
                         <div class="card-body lead">
 
-                            <form action="{{ url('/forms/enquiry') }}" method="POST">
+                            <form action="{{ route('contact') }}" method="POST">
                                 @csrf
 
                                 <div class="form-group">

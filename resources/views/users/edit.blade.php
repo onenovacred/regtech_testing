@@ -74,6 +74,12 @@
                                             placeholder="Email" value="{{ $user->email }}" readonly>
                                     </div>
                                 </div>
+                                 <div class="col-md-4">
+                                    <div class="form-group">
+                                    <label for="timezone">Time Zone</label>
+                                    <input type="number" class="form-control" id="timezone" value="{{ $user->timezone }}" name="timezone" placeholder="Enter timezone in Days">
+                                    </div>
+                                </div>
                             </div>
                             <div class="col-md-4">
                                     <div class="form-group">
@@ -83,8 +89,8 @@
                                             <option value="apimaster">Api Master</option>
                                             <option value="report">Report</option>
                                             <option value="transactions">Transactions</option>
-                                            <option value="schemetypemaster">Scheme Type Master</option>   
-				                        </select>    
+                                            <option value="schemetypemaster">Scheme Type Master</option>
+				                        </select>
                                     </div>
                             </div>
                             <div class="form-group">
@@ -179,7 +185,7 @@
                                         ->distinct()
                                         ->get();
                                 }
-                                
+
                                 ?>
                                 @foreach ($api_group as $key => $value)
                                     <div class="row">
@@ -211,7 +217,7 @@
                                             ->where('api_master.api_group_id', '=', $value->id)->distinct()
                                             ->get(['user_scheme_master.*', 'api_master.*']);
                                     }
-                                    
+
                                    ?>
                                     @if (count($sub_menus) > 0)
                                         @foreach ($sub_menus as $sub_menu)
@@ -254,15 +260,15 @@
                                                                 $data = json_decode($sub_menusid[0]->table_name);
                                                                 if (is_array($data)) {
                                                                     echo '<select id="stage_id" name="stage_id[]" class="form-control selectpicker multiselect" multiple="" data-live-search="true" data-actions-box="true">';
-                                                            
+
                                                                     foreach ($data as $tableName) {
                                                                         echo '<option value="' . $tableName . '">' . $tableName . '</option>';
                                                                     }
-                                                            
+
                                                                     echo '</select>';
                                                                 }
                                                             }
-                                                            
+
                                                             ?>
 
                                                         </div>
@@ -278,15 +284,15 @@
                                                                 $data = json_decode($sub_menusid[0]->request_table_name);
                                                                 if (is_array($data)) {
                                                                     echo '<select id="request_value" name="request_value[]" class="form-control selectpicker multiselect" multiple="" data-live-search="true" data-actions-box="true">';
-                                                            
+
                                                                     foreach ($data as $request_table_name) {
                                                                         echo '<option value="' . $request_table_name . '">' . $request_table_name . '</option>';
                                                                     }
-                                                            
+
                                                                     echo '</select>';
                                                                 }
                                                             }
-                                                            
+
                                                             ?>
 
                                                         </div>
@@ -364,7 +370,7 @@
                                         ->select('id', 'api_name', 'admin_price', 'basic_price', 'starter_price', 'standard_price', 'advance_price', 'growth_price', 'unicorn_price', 'api_group_id')
                                         ->where('api_group_id', $value->id)
                                         ->get();
-                                      
+
                                     } else {
                                         $sub_menus = DB::table('user_scheme_master')
                                             ->join('api_master', 'api_master.id', '=', 'user_scheme_master.api_id')
@@ -373,7 +379,7 @@
                                             ->where('api_master.api_group_id', '=', $value->id)->distinct()
                                             ->get(['user_scheme_master.*', 'api_master.*']);
                                     }
-                                       
+
                                     ?>
                                     @if (count($sub_menus) > 0)
                                         @foreach ($sub_menus as $key1 => $sub_menu)
@@ -441,7 +447,7 @@
                                                         id="txtPlanPrice{{ $sub_menu->id }}"
                                                         name="txtPlanPrice{{ $sub_menu->id }}"
                                                         value="{{ $sub_menu->$scheme_price }}" disabled>
-                                                    <?php 
+                                                    <?php
                                                         }else{
                                                     ?>
                                                     <input type="text" class="form-control"
@@ -539,7 +545,7 @@
                                                                     class="fa fa-fw fa-minus-circle"></i></a>
                                                         </div>
                                                     </div>
-                                                    <?php 
+                                                    <?php
                                                                     $priceRange = $key + 1;
                                                                 }
                                                             }
@@ -559,15 +565,15 @@
                                                                 $data = json_decode($sub_menusid[0]->table_name);
                                                                 if (is_array($data)) {
                                                                     echo '<select id="stage_id" name="stage_id[]" class="form-control selectpicker multiselect" multiple="" data-live-search="true" data-actions-box="true">';
-                                                            
+
                                                                     foreach ($data as $tableName) {
                                                                         echo '<option value="' . $tableName . '">' . $tableName . '</option>';
                                                                     }
-                                                            
+
                                                                     echo '</select>';
                                                                 }
                                                             }
-                                                            
+
                                                             ?>
 
                                                         </div>
@@ -583,21 +589,21 @@
                                                                 $data = json_decode($sub_menusid[0]->request_table_name);
                                                                 if (is_array($data)) {
                                                                     echo '<select id="stage_id" name="request_value[]" class="form-control selectpicker multiselect w-50" multiple="" data-live-search="true" data-actions-box="true">';
-                                                            
+
                                                                     foreach ($data as $request_table_name) {
                                                                         echo '<option value="' . $request_table_name . '">' . $request_table_name . '</option>';
                                                                     }
-                                                            
+
                                                                     echo '</select>';
                                                                 }
                                                             }
-                                                            
+
                                                             ?>
 
                                                         </div>
 
                                             </div>
-                                            
+
                                             <!-- <div class="row" id="content{{ $sub_menu->id }}" style="padding-bottom: 5px; display: none">
                                                     <div class="col-md-5">
                                                         <div class="custom-control custom-checkbox" style="margin-left: 8px;">
@@ -616,11 +622,11 @@
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    
+
                                                     <div class="col-md-2 text-center" id="regtech_plan1{{ $sub_menu->id }}">
                                                         <input type="text" class="form-control" id="txtPlanPrice{{ $sub_menu->id }}" name="txtPlanPrice{{ $sub_menu->id }}" value="" disabled>
                                                     </div>
-                                                    
+
                                                     <div class="col-md-2 text-center" id="user_price1{{ $sub_menu->id }}">
                                                         <input type="text" class="form-control grouptext_{{ $sub_menu->api_group_id }}" id="txtUserPrice{{ $sub_menu->id }}" disabled>
                                                     </div>
@@ -1152,7 +1158,7 @@
                 x + id + '" name="customPlanPrice' + x + id +
                 '" value="" placeholder="Rs."></div><div class="col-md-2" style="padding-top:5px"><a href="javascript:void(0);" class="remove_button' +
                 id + '" onclick="removeRange(' + id + x +
-                ')"><i class="fa fa-fw fa-minus-circle"></i></a></div></div>'; //New input field html 
+                ')"><i class="fa fa-fw fa-minus-circle"></i></a></div></div>'; //New input field html
             x++;
             $('.field_wrapper' + id).append(fieldHTML);
         };

@@ -16,21 +16,7 @@
                 href = "{{ route('kyc.corporate_gstin_apis') }}">GSTIN APIs</a>
             </div>
             <div class="card-body">
-                @if(isset($corporate_gstin[0]['corporate_gstin']['code']) && $corporate_gstin[0]['corporate_gstin']['code'] == '102' || $corporate_gstin[0]['corporate_gstin']['code'] == '404')
-                    <div class="alert alert-danger" role="alert">
-                        CORPORATE GSTIN is Invalid
-                    </div>
-                @endif
-                @if(isset($corporate_gstin[0]['corporate_gstin']['code']) && ($corporate_gstin[0]['corporate_gstin']['code'] == '400'))
-                    <div class="alert alert-danger" role="alert">
-                        Server Error, Please try later
-                    </div>
-                @endif
-                @if(isset($corporate_gstin[0]['corporate_gstin']['code']) && $corporate_gstin[0]['corporate_gstin']['code'] == '500')
-                    <div class="alert alert-danger" role="alert">
-                        Internal Server Error. Please contact techsupport@docboyz.in. for more details.
-                    </div>
-                @endif
+              
                 <div class="row">
                     <div class="col-md-6 offset-md-3">
                         <form role="form" method="post" action="{{route('kyc.corporate_gstin')}}">

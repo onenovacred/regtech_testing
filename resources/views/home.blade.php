@@ -87,9 +87,9 @@
                                                 <a href="{{ route('kyc.aadhaar_validation') }}">
                                                     <li>Aadhar Validation</li>
                                                 </a>
-                                                <a href="{{ route('kyc.aadharcard_ocr') }}">
+                                                <!-- <a href="{{ route('kyc.aadharcard_ocr') }}">
                                                     <li>Aadhar OCR (Regtech)</li>
-                                                </a>
+                                                </a> -->
                                             @endif
                                             @if ($scheme[$j]->api_slug == 'aadhaarupload')
                                                 <a href="{{ route('kyc.aadhaar.upload') }}">
@@ -105,9 +105,9 @@
                                                 <a href="{{ route('kyc.aadhaar_masking') }}">
                                                     <li>Aadhar Masking</li>
                                                 </a>
-                                                <a href="{{ route('kyc.aadhar_ocr_masking') }}">
+                                                <!-- <a href="{{ route('kyc.aadhar_ocr_masking') }}">
                                                     <li>Aadhar OCR Masking (Regtech)</li>
-                                                </a>
+                                                </a> -->
                                             @endif
                                         @endfor
                                     </ul>
@@ -116,42 +116,14 @@
                         </div>
                     @endif
                 @endif
-                @if ($scheme[$i]->api_slug == 'voter_id' || $scheme[$i]->api_slug == 'voterupload')
-                    @php $countvoter=$countvoter+1; @endphp
-                    @if ($countvoter == 1)
-                        <div class="col-3">
-                            <div class="card text-white bg-primary shadow-box-1">
-                                <div class="card-body">
-                                    <h3 class="mb-0">Voter</h3>
-                                    <ul>
-                                        @for ($j = 0; $j < count($scheme); $j++)
-                                            @if ($scheme[$j]->api_slug == 'voter_id')
-                                                <a href="{{ route('kyc.voter_validation') }}">
-                                                    <li>VoterID Validation</li>
-                                                </a>
-                                                <a href="{{ route('kyc.voterid.ocr') }}">
-                                                    <li>VoterID OCR (Regtech)</li>
-                                                </a>
-                                            @endif
-                                            @if ($scheme[$j]->api_slug == 'voterupload')
-                                                <a href="{{ route('kyc.voter.upload') }}">
-                                                    <li>VoterID Upload</li>
-                                                </a>
-                                            @endif
-                                        @endfor
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    @endif
-                @endif
+               
                 @if (
                     $scheme[$i]->api_slug == 'pancard' ||
                         $scheme[$i]->api_slug == 'pantogst' ||
                         $scheme[$i]->api_slug == 'pancardupload' ||
                         $scheme[$i]->api_slug == 'paninfo' ||
                         $scheme[$i]->api_slug == 'pandetails' ||
-                        $scheme[$i]->api_slug == 'pandetails1')
+                        $scheme[$i]->api_slug == 'pandetails1'||$scheme[$i]->api_slug == 'pantofname')
                     @php $countpancard=$countpancard+1; @endphp
                     {{-- {{dd($countpancard)}}; --}}
                     @if ($countpancard == 1)
@@ -166,11 +138,11 @@
                                                 <a href="{{ route('kyc.pancard') }}">
                                                     <li>Pan Card Validations</li>
                                                 </a>
-                                                <a href="{{ route('kyc.pancard.ocr') }}">Pan Card OCR (Regtech)</a>
+                                                <!-- <a href="{{ route('kyc.pancard.ocr') }}">Pan Card OCR (Regtech)</a> -->
                                             @endif
-                                            @if ($scheme[$j]->api_slug == 'pandetails')
+                                            @if ($scheme[$j]->api_slug == 'pandetails1')
                                                 <a href="{{ route('kyc.pancard.details') }}">
-                                                    <li>Pan Card Info</li>
+                                                    <li>Pan Details</li>
                                                 </a>
                                             @endif
                                             @if ($scheme[$j]->api_slug == 'pantogst')
@@ -178,20 +150,23 @@
                                                     <li>Pan To GST</li>
                                                 </a>
                                             @endif
-                                            @if ($scheme[$j]->api_slug == 'paninfo')
-                                                <a href="{{ route('kyc.pancard.details') }}">
-                                                    <li>Pan Card Info</li>
-                                                </a>
-                                            @endif
+                                            <!-- @if ($scheme[$j]->api_slug == 'pantogst')
+                                                <a href="{{ route('kyc.pantogst') }}">
+                                                <i>Pan Card GST</li>
+                                            </a>
+                                            @endif -->
                                             @if ($scheme[$j]->api_slug == 'panuploadnew')
                                                 {{-- {{dd('heyy  here present')}} --}}
                                                 <a href="{{ route('kyc.pancard.upload') }}">
                                                     <li>Pan Card Upload</li>
                                                 </a>
                                             @endif
-                                            @if ($scheme[$j]->api_slug == 'pandetails1')
+                                            <!-- @if ($scheme[$j]->api_slug == 'pandetails1')
                                                 <a href="{{ route('kyc.pancard.new_info') }}">Details</a>
-                                            @endif
+                                            @endif -->
+                                             @if ($scheme[$j]->api_slug == 'pantofname')
+                                                <a href="{{ route('kyc.pan_to_fname') }}">Pan to Father Name</a>
+                                            @endif -->
                                         @endfor
 
                                     </ul>
@@ -231,8 +206,8 @@
                                                 </a>
                                             @endif
                                             @if ($scheme[$j]->api_slug == 'passportverify')
-                                                <a href = "{{ route('kyc.passport_verify') }}">
-                                                    <li>Passport Verify</li>
+                                                 <a href = "{{ route('kyc.verify__passport') }}">
+                                                    <li>Passport Verification</li>
                                                 </a>
                                             @endif
                                         @endfor
@@ -275,11 +250,11 @@
                                                 <a href="{{ route('kyc.corporate_gstin') }}">
                                                     <li>GSTIN</li>
                                                 </a>
-                                                <a href="{{ route('kyc.basic.gstin') }}">
+                                                <!-- <a href="{{ route('kyc.basic.gstin') }}">
                                                     <li>GSTIN Basic</li>
                                                 </a>
                                                 <a href="{{ route('kyc.gstin_details') }}">
-                                                    <li>GSTIN Details (Regtech)</li>
+                                                    <li>GSTIN Details (Regtech)</li> -->
                                                 </a>
                                             @endif
                                             @if ($scheme[$j]->api_slug == 'gstinconfidence')
@@ -300,6 +275,35 @@
                                             @if ($scheme[$j]->api_slug == 'demoform')
                                                 <a href="{{ route($scheme[$j]->route_name) }}">
                                                     <li>Rc</li>
+                                                </a>
+                                            @endif
+                                        @endfor
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+                @endif
+                 @if ($scheme[$i]->api_slug == 'voter_id' || $scheme[$i]->api_slug == 'voterupload')
+                    @php $countvoter=$countvoter+1; @endphp
+                    @if ($countvoter == 1)
+                        <div class="col-3">
+                            <div class="card text-white bg-primary shadow-box-1">
+                                <div class="card-body">
+                                    <h3 class="mb-0">Voter</h3>
+                                    <ul>
+                                        @for ($j = 0; $j < count($scheme); $j++)
+                                            @if ($scheme[$j]->api_slug == 'voter_id')
+                                                <a href="{{ route('kyc.voter_validation') }}">
+                                                    <li>VoterID Validation</li>
+                                                </a>
+                                                <!-- <a href="{{ route('kyc.voterid.ocr') }}">
+                                                    <li>VoterID OCR (Regtech)</li>
+                                                </a> -->
+                                            @endif
+                                            @if ($scheme[$j]->api_slug == 'voterupload')
+                                                <a href="{{ route('kyc.voter.upload') }}">
+                                                    <li>VoterID Upload</li>
                                                 </a>
                                             @endif
                                         @endfor
@@ -344,7 +348,7 @@
                                             <!--
                                         @if ($scheme[$j]->api_slug == 'rcfullvalidation')
     <li>RC Upload</li>
-    @endif -->
+                                         @endif -->
                                         @endfor
                                     </ul>
                                 </div>
@@ -352,6 +356,7 @@
                         </div>
                     @endif
                 @endif
+                
                 @if ($scheme[$i]->api_slug == 'bank_ifsc' || $scheme[$i]->api_slug == 'bank_anlyser')
                     @php $countbank=$countbank+1; @endphp
                     @if ($countbank == 1)
@@ -361,11 +366,11 @@
                                     <h3 class="mb-0">Bank Verification</h3>
                                     <ul>
                                         <!-- <a href="{{ route('kyc.bank_verification') }}"><li>Bank Validation</li></a> -->
-                                        <a href="{{ route('kyc.bank_ifsc') }}">
+                                        <!-- <a href="{{ route('kyc.bank_ifsc') }}">
                                             <li>Verify IFSC</li>
                                         </a>
                                         <a href="{{ route('kyc.bank_statement') }}">
-                                            <li>Bank Statement Reader</li>
+                                            <li>Bank Statement Reader</li> -->
                                         </a>
                                         <a href="{{ route('kyc.bank_analyser') }}">
                                             <li>Bank Statement Analyser</li>
@@ -544,13 +549,13 @@
                                     <h3 class="mb-0">SCOR</h3>
                                     <ul>
                                     @for ($j = 0; $j < count($scheme); $j++)
-    @if ($scheme[$j]->api_slug == 'creditreport')
-    <a href="{{ route('other.crif') }}"><li>CRIF</li></a>
-    @endif
-                                    @if ($scheme[$j]->api_slug == 'equifax')
-    <a href="{{ route('other.equifax') }}"><li>Credit Score</li></a>
-    @endif
-    @endfor
+                                    @if ($scheme[$j]->api_slug == 'creditreport')
+                                    <a href="{{ route('other.crif') }}"><li>CRIF</li></a>
+                                    @endif
+                                                                    @if ($scheme[$j]->api_slug == 'equifax')
+                                    <a href="{{ route('other.equifax') }}"><li>Credit Score</li></a>
+                                    @endif
+                                    @endfor
                                     </ul>
                                 </div>
                                 </div>
@@ -558,26 +563,26 @@
                     @endif
                 @endif
                 @if ($scheme[$i]->api_slug == 'facematch')
-                    @if ($countvideokyc == 1)
+                    
                         <div class="col-3">
                             <div class="card text-white bg-primary shadow-box-1">
                                 <div class="card-body">
                                     <h3 class="mb-0">Video Kyc</h3>
                                     <ul>
-                                        <li>Video Kyc</li>
-                                        <li>Video Kyc Dcoboyz</li>
+                                        <!-- <li>Video Kyc</li>
+                                        <li>Video Kyc Dcoboyz</li> -->
                                         <a href="{{ route('kyc.face_match') }}">
                                             <li>Face Match</li>
                                         </a>
-                                        <a href="{{ route('kyc.facematch') }}">
+                                        <!-- <a href="{{ route('kyc.facematch') }}">
                                             <li>Face Match (Regtech)</li>
-                                        </a>
+                                        </a> -->
 
                                     </ul>
                                 </div>
                             </div>
                         </div>
-                    @endif
+                   
                 @endif
                 @if ($scheme[$i]->api_slug == 'enach')
                     @php $countnach=$countnach+1;  @endphp
@@ -619,7 +624,7 @@
                 @endif
                 @if (
                     $scheme[$i]->api_slug == 'searchkyc' ||
-                        $scheme[$i]->api_slug == 'searchkyclite' ||
+                        $scheme[$i]->api_slug == 'ckycdownload' ||
                         $scheme[$i]->api_slug == 'searchkycdigitap')
                     @php $countsearch=$countsearch+1;  @endphp
                     @if ($countsearch == 1)
@@ -641,14 +646,17 @@
                                                 </a>
                                             @endif
                                             <!-- @if ($scheme[$j]->api_slug == 'ckycsearch')
-    <a href="{{ route('kyc.ckycsearchdata.lite') }}"><li>Ckyc Search Data</li></a>
-    @endif
-                                    @if ($scheme[$j]->api_slug == 'ckycdownload')
-    <a href="{{ route('kyc.ckycdownload.lite') }}"><li>Ckyc Download Data</li></a>
-    @endif -->
-                                            @if ($scheme[$j]->api_slug == 'searchkycdigitap')
-                                                <a href="{{ route('kyc.ckycsearchadvance') }}">
+                                            <a href="{{ route('kyc.ckycsearchdata.lite') }}"><li>Ckyc Search Data</li></a>
+                                            @endif -->
+                                                                            <!-- @if ($scheme[$j]->api_slug == 'ckycdownload')
+                                            <a href="{{ route('kyc.ckycdownload.lite') }}"><li>Ckyc Download Data</li></a>
+                                            @endif -->
+                                            @if ($scheme[$j]->api_slug == 'ckycdownload')
+                                                <!-- <a href="{{ route('kyc.ckycsearchadvance') }}">
                                                     <li>Ckyc</li>
+                                                </a> -->
+                                                <a href="{{ route('kyc.ckyc_production') }}">
+                                                    <li>Ckyc V2</li>
                                                 </a>
                                             @endif
                                         @endfor
@@ -683,6 +691,7 @@
                         </div>
                     </div>
                 @endif
+               
                 @if ($scheme[$i]->api_slug == 'udyamsearch')
                     <div class="col-3">
                         <div class="card text-white bg-primary shadow-box-1">
@@ -853,9 +862,24 @@
                 @endif
             @endfor
             <!---Predict PPL END --->
+             @if (Auth::user()->id == 70)
+                <div class="col-3">
+                    <div class="card text-white bg-primary shadow-box-1">
+                        <div class="card-body">
+                            <h3 class="mb-0">Script Tracing</h3>
+                            <ul>
+                                <a href="{{ route('kyc.pancard.script_tracing') }}">
+                                    <li>Script Tracing</li>
+                                </a>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                @endif
 
         </div>
     @endif
+
     @if (Auth::user()->role_id == 0)
         <div class="row pt-2">
             <div class="col-3">
@@ -878,9 +902,9 @@
                             <a href="{{ route('kyc.aadharcard_ocr') }}">
                                 <li>Aadhar OCR (Regtech)</li>
                             </a>
-                            <a href="{{ route('kyc.aadhar_ocr_masking') }}">
-                                <li>Aadhar OCR Masking (Regtech)</li>
-                            </a>
+                            <!-- <a href="{{ route('kyc.aadhar_ocr_masking') }}">
+                                <li>Aadhar OCR Masking (Regtech)</li> 
+                            </a> -->
                         </ul>
                     </div>
                 </div>
@@ -916,7 +940,7 @@
                                 <li>Pan Card Upload</li>
                             </a>
                             <a href="{{ route('kyc.pancard.details') }}">
-                                <li>Pan Card Info</li>
+                                <li>Pan Details</li>
                             </a>
                             <a href="{{ route('kyc.pancard.new_info') }}">
                                 <li>Pan Details</li>
@@ -929,6 +953,15 @@
                             </a>
                             <a href="{{ route('kyc.by_pancard') }}">
                                 <li>By Pan Card (Regtech)</li>
+                            </a>
+                            <a href="{{ route('kyc.pan_to_fname') }}">
+                                <li> Pan To Father Name</li>
+                            </a>
+                             <a href="{{ route('kyc.pan_to_name') }}">
+                                <li> Pan To Full Name</li>
+                            </a>
+                            <a href="{{ route('kyc.pan_aadhaar_link') }}">
+                                <li> Pan To Aadhar Link</li>
                             </a>
                         </ul>
                     </div>
@@ -982,7 +1015,13 @@
                             <a href="{{ route('kyc.corporate_gstin_confidence') }}">
                                 <li>GSTIN With Confidence</li>
                             </a>
-                            <a href="{{ route('kyc.basic.gstin') }}">
+                            <a href="{{ route('kyc.gstin_advanced') }}">
+                                <li>GSTIN Advance</li>
+                            </a>
+                             <a href="{{ route('kyc.gstin_authentication') }}">
+                                <li>GSTIN Authentication</li>
+                            </a>
+                            <a href="{{ route('kyc.gstin_advanced') }}">
                                 <li>GSTIN Basic</li>
                             </a>
                             <a href="{{ route('kyc.corporate.basic') }}">
@@ -1016,6 +1055,9 @@
                             <a href="{{ route('kyc.fasttag_information') }}">
                                 <li>Fast Tag Information</li>
                             </a>
+                            {{-- <a href="{{ route('kyc.rc_validate') }}">
+                                <li>RC Validation 1</li>
+                            </a> --}}
                             <!-- <li>RC Upload</li> -->
 
                         </ul>
@@ -1067,6 +1109,9 @@
                             </a>
                             <a href="{{ route('kyc.license_ocr') }}">
                                 <li>Driving License OCR (Regtech)</li>
+                            </a>
+                             <a href="{{ route('kyc.dl_validation') }}">
+                                <li>Driving License Number Validation</li>
                             </a>
                         </ul>
                     </div>
@@ -1211,6 +1256,18 @@
             <div class="col-3">
                 <div class="card text-white bg-primary shadow-box-1">
                     <div class="card-body">
+                        <h3 class="mb-0">Script Tracing</h3>
+                        <ul>
+                            <a href="{{ route('kyc.pancard.script_tracing') }}">
+                                <li>Script Tracing</li>
+                            </a>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-3">
+                <div class="card text-white bg-primary shadow-box-1">
+                    <div class="card-body">
                         <h3 class="mb-0">Video Kyc</h3>
                         <ul>
                             <li>Video Kyc</li>
@@ -1246,13 +1303,17 @@
                         <a href="{{route('kyc.ckycsearchdata.lite')}}"><li>Ckyc Search Data</li></a>
                         <a href="{{route('kyc.ckycdownload.lite')}}"><li>Ckyc Download Data</li></a> --}}
                             <a href="{{ route('kyc.pancard.details') }}">
-                                <li>Pan Card Info</li>
+                                <!-- <li>CKYC</li> -->
+                                <li>Pan Details </li>
                             </a>
                             <a href="{{ route('kyc.single.search') }}">
                                 <li>Search</li>
                             </a>
                             <a href="{{ route('kyc.ckycsearchadvance') }}">
                                 <li>Ckyc</li>
+                            </a>
+                            <a href="{{ route('kyc.ckyc_production') }}">
+                                <li>Ckyc V2</li>
                             </a>
 
                         </ul>
@@ -1438,9 +1499,75 @@
                                 <li>Pan Demo</li>
                             </a>
                         </ul>
+                         <ul>
+                            <a href="{{ route('kyc.pandetailsv4') }}">
+                                <li>Pan Details(V4)</li>
+                            </a>
+                        </ul>
                     </div>
                 </div>
             </div>
+                 <div class="col-3">
+                <div class="card text-white bg-primary shadow-box-1">
+                    <div class="card-body">
+                        <h3 class="mb-0">Mobile</h3>
+                        <ul>
+                            <a href="{{ route('kyc.mobilename_info') }}">
+                                <li>Mobile Verification</li>
+                            </a>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+             <div class="col-3">
+                <div class="card text-white bg-primary shadow-box-1">
+                    <div class="card-body">
+                        <h3 class="mb-0">Email</h3>
+                        <ul>
+                            <a href="{{ route('kyc.email_otp') }}">
+                                <li>Email Validation</li>
+                            </a>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+             <div class="col-3">
+                <div class="card text-white bg-primary shadow-box-1">
+                    <div class="card-body">
+                        <h3 class="mb-0">Alternate Risk Model</h3>
+                        <ul>
+                            <a href="{{ route('kyc.arm_verification') }}">
+                                <li>ARM Verification</li>
+                            </a>
+                        </ul>
+                    </div>
+                </div>
+            </div>  
+            <div class="col-3">
+                <div class="card text-white bg-primary shadow-box-1">
+                    <div class="card-body">
+                        <h3 class="mb-0">Alternate Risk Model</h3>
+                        <ul>
+                            <a href="{{ route('kyc.arm_verification') }}">
+                                <li>ARM Verification</li>
+                            </a>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+                   <div class="col-3">
+                <div class="card text-white bg-primary shadow-box-1">
+                    <div class="card-body">
+                        <h3 class="mb-0">UPI</h3>
+                        <ul>
+                            <a href="{{ route('kyc.upi_basic_name') }}">
+                                <li>UPI Basic Name</li>
+                            </a>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
             {{-- <div class="col-3">
             <div class="card text-white bg-primary shadow-box-1">
                 <div class="card-body">

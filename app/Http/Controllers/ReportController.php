@@ -174,7 +174,8 @@ class ReportController extends Controller
                 } else {
                     // return 'apitestelse';
                     // if($serviceType==0)
-                    $user_scheme_master = UserSchemeMaster::with('api_master')->where('user_id', $userService)->groupby('api_id')->get();
+                    // $user_scheme_master = UserSchemeMaster::with('api_master')->where('user_id', $userService)->groupby('api_id')->get();
+                    $user_scheme_master = UserSchemeMaster::with('api_master')->where('user_id', $userService)->get();
 
                     // else
                     //     $user_scheme_master = UserSchemeMaster::with('api_master')->where('user_id', $userService)->where('api_id',$serviceType)->get();

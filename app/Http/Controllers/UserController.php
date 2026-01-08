@@ -60,19 +60,41 @@ class UserController extends Controller
 
     public function status($id)
     {
-
         $user_deatails = User::where('id', $id)->first();
         if ($user_deatails['status'] == 0) {
+            $randomtoken = str_pad(rand(0, 9999999999), 10, '0', STR_PAD_LEFT); // 10 digit random number
             $password = 'adminpasschange@0988';
-            $update_access_token = $user_deatails->id . md5(rand(1, 10) . microtime());
-            $update_user_status = DB::table('users')->where('id', $id)->update(['password' => bcrypt($password), 'access_token' => $update_access_token, 'status' => 1]);
+            // $update_access_token = $user_deatails->id . md5(rand(1, 10) . microtime());
+            // $update_user_status = DB::table('users')->where('id', $id)->update(['password' => bcrypt($password), 'access_token' => $update_access_token, 'status' => 1]);
+            $update_user_status = DB::table('users')->where('id', $id)->update([
+            'password'     => bcrypt($password),
+            'old_token'    => $user_deatails->access_token, // shift current access_token to old_token
+            'access_token' => $randomtoken,    // put random 10 digit number
+            'status'       => 1,
+            ]);
             return redirect()->route('user.list')->with('success', 'User status updated successfully');
             // return $update_access_token;
         } else {
-            $password = 'adminpasschange@0988';
-            $update_access_token = $user_deatails->id . md5(rand(1, 10) . microtime());
-            $update_user_status = DB::table('users')->where('id', $id)->update(['password' => bcrypt($password), 'access_token' => $update_access_token, 'status' => 0]);
+             $password = 'adminpasschange@0988';
+
+        if (!empty($user_deatails->old_token)) {
+            // old_token exists → restore it
+            DB::table('users')->where('id', $id)->update([
+                'password'     => bcrypt($password),
+                'access_token' => $user_deatails->old_token, // restore old_token
+                'old_token'    => null,                      // clear old_token
+                'status'       => 0,
+            ]);
             return redirect()->route('user.list')->with('success', 'User status updated successfully');
+
+        } else {
+            // old_token is empty → just activate without touching access_token
+            DB::table('users')->where('id', $id)->update([
+                'password'     => bcrypt($password),
+                'status'       => 0,
+            ]);
+        }
+
         }
     }
 
@@ -104,6 +126,7 @@ class UserController extends Controller
             $users->type = $request->rdo;
             $users->verified = 0;
             $users->one_time_comission = $request->one_time_comission;
+            $users->timezone = $request->timezone;
             $users->parent_id = Auth::user()->id;
             $users->subparent_id = Auth::user()->id;
             if ($users->save()) {
@@ -142,6 +165,14 @@ class UserController extends Controller
                             ['user_id' => $user_id, 'api_id' => $res[0], 'plan' => $res[4], 'plan_amount' => $plan_amount, 'duration' => $plan_duration, 'custom_plan' => $res[3], 'payment_slab' => $res[5]],
                             ['scheme_price' => $res[1], 'api_group_id' => $res[2], 'start_date' => Carbon::now(), 'end_date' => Carbon::now()->addDays($plan_duration)]
                         );
+                        DB::table('user_transactions')->insert([
+                        'user_id' => $user_id,
+                        'remark' => 'Recharge',
+                        'amount' => $plan_amount,
+                        'type' => 'credit',
+                        'created_at' => Carbon::now(),
+                        'updated_at' => Carbon::now()
+                    ]);
                     }
                 }
 
@@ -150,7 +181,7 @@ class UserController extends Controller
                 return redirect()->route('user.list')->with('error', 'Failed to add user details');
             }
         } elseif (Auth::user()->id != 1 && Auth::user()->role_id == 1) {
-            
+
             if (Auth::user()->subparent_id == '' || Auth::user()->subparent_id == null) {
                 dd('hello');
                 $users = new User;
@@ -176,6 +207,7 @@ class UserController extends Controller
                 $users->type = $request->rdo;
                 $users->verified = 0;
                 $users->one_time_comission = $request->one_time_comission;
+                $users->timezone = $request->timezone;
                 $users->parent_id = Auth::user()->id;
                 $users->subparent_id = Auth::user()->id;
                 if ($users->save()) {
@@ -216,7 +248,14 @@ class UserController extends Controller
                                 ['user_id' => $user_id, 'api_id' => $res[0], 'plan' => $res[4], 'plan_amount' => $plan_amount, 'duration' => $plan_duration, 'custom_plan' => $res[3], 'payment_slab' => $res[5]],
                                 ['scheme_price' => $res[1], 'api_group_id' => $res[2], 'start_date' => Carbon::now(), 'end_date' => Carbon::now()->addDays($plan_duration)]
                             );
-
+                            DB::table('user_transactions')->insert([
+                            'user_id' => $user_id,
+                            'remark' => 'Recharge',
+                            'amount' => $plan_amount,
+                            'type' => 'credit',
+                            'created_at' => Carbon::now(),
+                            'updated_at' => Carbon::now()
+                            ]);
                         }
                     }
                     return redirect()->route('user.list')->with('success', 'User added successfully');
@@ -249,6 +288,7 @@ class UserController extends Controller
                 $users->type = $request->rdo;
                 $users->verified = 0;
                 $users->one_time_comission = $request->one_time_comission;
+                $users->timezone = $request->timezone;
                 $users->parent_id = $userparent->parent_id;
                 $users->subparent_id = Auth::user()->id;
                 if ($users->save()) {
@@ -289,6 +329,14 @@ class UserController extends Controller
                                 ['user_id' => $user_id, 'api_id' => $res[0], 'plan' => $res[4], 'plan_amount' => $plan_amount, 'duration' => $plan_duration, 'custom_plan' => $res[3], 'payment_slab' => $res[5]],
                                 ['scheme_price' => $res[1], 'api_group_id' => $res[2], 'start_date' => Carbon::now(), 'end_date' => Carbon::now()->addDays($plan_duration)]
                             );
+                            DB::table('user_transactions')->insert([
+                            'user_id' => $user_id,
+                            'remark' => 'Recharge',
+                            'amount' => $plan_amount,
+                            'type' => 'credit',
+                            'created_at' => Carbon::now(),
+                            'updated_at' => Carbon::now()
+                            ]);
                         }
                     }
                     return redirect()->route('user.list')->with('success', 'User added successfully');
@@ -322,6 +370,7 @@ class UserController extends Controller
             $users->type = $request->rdo;
             $users->verified = 0;
             $users->one_time_comission = $request->one_time_comission;
+            $users->timezone = $request->timezone;
             $users->parent_id = null;
             $users->subparent_id = null;
             if ($users->save()) {
@@ -362,6 +411,14 @@ class UserController extends Controller
                             ['user_id' => $user_id, 'api_id' => $res[0], 'plan' => $res[4], 'plan_amount' => $plan_amount, 'duration' => $plan_duration, 'custom_plan' => $res[3], 'payment_slab' => $res[5]],
                             ['scheme_price' => $res[1], 'api_group_id' => $res[2], 'start_date' => Carbon::now(), 'end_date' => Carbon::now()->addDays($plan_duration)]
                         );
+                        DB::table('user_transactions')->insert([
+                        'user_id' => $user_id,
+                        'remark' => 'Recharge',
+                        'amount' => $plan_amount,
+                        'type' => 'credit',
+                        'created_at' => Carbon::now(),
+                        'updated_at' => Carbon::now()
+                    ]);
                     }
                 }
                 return redirect()->route('user.list')->with('success', 'User added successfully');
@@ -384,10 +441,10 @@ class UserController extends Controller
 
         $user = User::where('id', $id)->first();
         $api_group = ApiGroup::all();
-        
+
         $user_scheme = UserSchemeMaster::where('user_id', $id)->get();
-        
-        
+
+
         $scheme_types = SchemeTypeMaster::all();
         // dd($scheme_types);
         $user_scheme_ids = "";
@@ -430,7 +487,7 @@ class UserController extends Controller
     //     {
     //         $user->scheme_type = $request->scheme_type;
     //         $user->scheme_type_id = null;
-    //         $user->scheme_hit_count = null;   
+    //         $user->scheme_hit_count = null;
     //     }
     //     $user->save();
 
@@ -502,7 +559,8 @@ class UserController extends Controller
 
             $users = User::where('id', $request->user_id)->update([
                 'name' => $request->name,
-                'email' => $request->email
+                'email' => $request->email,
+                'timezone' => $request->timezone,
             ]);
 
             $plan_amount = '';
@@ -621,7 +679,7 @@ class UserController extends Controller
             // if($user->start_date == '' || $user->start_date == null){
             //     $scheme_details = UserSchemeMaster::where('user_id',Auth()->user()->id)->get();
             //     foreach($scheme_details as $details){
-            //         $date_update = DB::table('user_scheme_master')->where('user_id', $user->id)->update(['start_date'=> Carbon::now(), 'end_date'=> Carbon::now()->addDays($details->duration)]);    
+            //         $date_update = DB::table('user_scheme_master')->where('user_id', $user->id)->update(['start_date'=> Carbon::now(), 'end_date'=> Carbon::now()->addDays($details->duration)]);
             //     }
             //     //$date_update = UserSchemeMaster::update(['start_date'=> Carbon::now()])->where('user_id', $user->id);
             // }
@@ -652,7 +710,8 @@ class UserController extends Controller
 
             $users = User::where('id', $request->user_id)->update([
                 'name' => $request->name,
-                'email' => $request->email
+                'email' => $request->email,
+                'timezone' => $request->timezone,
             ]);
 
             // $update_access_token = User::where('id',$request->user_id)->first();
@@ -745,7 +804,7 @@ class UserController extends Controller
             // if($user->start_date == '' || $user->start_date == null){
             //     $scheme_details = UserSchemeMaster::where('user_id',Auth()->user()->id)->get();
             //     foreach($scheme_details as $details){
-            //         $date_update = DB::table('user_scheme_master')->where('user_id', $user->id)->update(['start_date'=> Carbon::now(), 'end_date'=> Carbon::now()->addDays($details->duration)]);    
+            //         $date_update = DB::table('user_scheme_master')->where('user_id', $user->id)->update(['start_date'=> Carbon::now(), 'end_date'=> Carbon::now()->addDays($details->duration)]);
             //     }
             //     //$date_update = UserSchemeMaster::update(['start_date'=> Carbon::now()])->where('user_id', $user->id);
             // }
@@ -922,7 +981,7 @@ class UserController extends Controller
             // if($user->start_date == '' || $user->start_date == null){
             //     $scheme_details = UserSchemeMaster::where('user_id',Auth()->user()->id)->get();
             //     foreach($scheme_details as $details){
-            //         $date_update = DB::table('user_scheme_master')->where('user_id', $user->id)->update(['start_date'=> Carbon::now(), 'end_date'=> Carbon::now()->addDays($details->duration)]);    
+            //         $date_update = DB::table('user_scheme_master')->where('user_id', $user->id)->update(['start_date'=> Carbon::now(), 'end_date'=> Carbon::now()->addDays($details->duration)]);
             //     }
             //     //$date_update = UserSchemeMaster::update(['start_date'=> Carbon::now()])->where('user_id', $user->id);
             // }
@@ -1046,7 +1105,7 @@ class UserController extends Controller
             // if($user->start_date == '' || $user->start_date == null){
             //     $scheme_details = UserSchemeMaster::where('user_id',Auth()->user()->id)->get();
             //     foreach($scheme_details as $details){
-            //         $date_update = DB::table('user_scheme_master')->where('user_id', $user->id)->update(['start_date'=> Carbon::now(), 'end_date'=> Carbon::now()->addDays($details->duration)]);    
+            //         $date_update = DB::table('user_scheme_master')->where('user_id', $user->id)->update(['start_date'=> Carbon::now(), 'end_date'=> Carbon::now()->addDays($details->duration)]);
             //     }
             //     //$date_update = UserSchemeMaster::update(['start_date'=> Carbon::now()])->where('user_id', $user->id);
             // }
@@ -1135,5 +1194,5 @@ class UserController extends Controller
     }
 
 
-    
+
 }

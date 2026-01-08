@@ -271,7 +271,7 @@ class CrifController extends Controller
         if ($err) {
             return response()->json(['error'=>'Something went wrong. Please try again.']);
         } else {
-            return response()->json(['success'=>'OTP sent successfully']);
+            return response()->json(['otp'=>$otp,'success'=>'OTP sent successfully']);
         }
     }
 
@@ -279,7 +279,7 @@ class CrifController extends Controller
     // Verify OTP
     public function verifyotp(Request $request)
     {
-        return $request->all();
+        //  return $request->all();
       
         if(Session::has('otp_code')){
             $otp_code = Session::get('otp_code');

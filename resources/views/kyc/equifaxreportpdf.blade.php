@@ -132,7 +132,8 @@
                         <tr>
                             <td>
                                 <h3 class = "data-field">
-                                    Consumer Name: {{ isset($myarray['consumerName']) ? $myarray['consumerName'] : '' }}
+                                    Consumer Name: {{ "{$equifax['InquiryRequestInfo']['FirstName']} {$equifax['InquiryRequestInfo']['LastName']}" }}
+                                    <!-- Consumer Name: {{ isset($myarray['consumerName']) ? $myarray['consumerName'] : '' }} -->
                                 </h3>
                             </td>
                         </tr>

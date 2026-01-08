@@ -87,29 +87,13 @@
                                 <h3>Vehicle Details</h3>
                                 <hr>
                                 <p><strong>RC Number:</strong> {{ $rc_validation[0]['rc_validation']['data']['rc_number'] }}</p>
-                                <p><strong>Registration Date:</strong> {{ $rc_validation[0]['rc_validation']['data']['registration_date'] }}</p>
+                                <p><strong>Registration Date:</strong> {{ $rc_validation[0]['rc_validation']['data']['manufacturing_date'] }}</p>
                                 <p><strong>Manufacturing Date:</strong> {{ $rc_validation[0]['rc_validation']['data']['manufacturing_date'] }}</p>
-                                <p><strong>Registered At:</strong> {{ $rc_validation[0]['rc_validation']['data']['registered_at'] }}</p>
-                                <p><strong>Fuel Type:</strong> {{$rc_validation[0]['rc_validation']['data']['fuel_type']}}</p>
-                                <p><strong>Fit Upto:</strong> {{$rc_validation[0]['rc_validation']['data']['fit_up_to']}}</p>
-                                <p><strong>Tax Upto:</strong> {{$rc_validation[0]['rc_validation']['data']['tax_upto']}}</p>
+                                <p><strong>Model Name:</strong> {{ $rc_validation[0]['rc_validation']['data']['model_name'] }}</p>
+                                <p><strong>Vehicle chasi number:</strong> {{$rc_validation[0]['rc_validation']['data']['vehicle_chasi_number']}}</p>
+                            
             
-                                <h3>Insurance</h3>
-                                <hr>
-                                <p><strong>Insurance Upto:</strong> {{ $rc_validation[0]['rc_validation']['data']['insurance_upto'] }}</p>
-                                <hr>
-                                <p><strong>rc_number: </strong>{{ $rc_validation[0]['rc_validation']['data']['rc_number' ] }}</p>
-                                <p><strong>registration_date: </strong>{{ $rc_validation[0]['rc_validation']['data']['registration_date' ] }}</p>
-                                <p><strong>owner_name: </strong>{{ $rc_validation[0]['rc_validation']['data']['owner_name' ] }}</p>
-                                <p><strong>vehicle_category:</strong>{{ $rc_validation[0]['rc_validation']['data']['vehicle_category' ] }}</p>
-                                <p><strong>fuel_type:</strong>{{ $rc_validation[0]['rc_validation']['data']['fuel_type' ] }}</p>
-                                <p><strong>fit_up_to:</strong>{{ $rc_validation[0]['rc_validation']['data']['fit_up_to' ] }}</p>
-                                <p><strong>insurance_upto:</strong>{{ $rc_validation[0]['rc_validation']['data']['insurance_upto' ] }}</p>
-                                <p><strong>manufacturing_date:</strong>{{ $rc_validation[0]['rc_validation']['data']['manufacturing_date' ] }}</p>
-                                <p><strong>registered_at:</strong>{{ $rc_validation[0]['rc_validation']['data']['registered_at' ] }}</p>
-                                <p><strong>tax_upto:</strong>{{ $rc_validation[0]['rc_validation']['data']['tax_upto' ] }}</p>
-                                <p><strong>pucc_upto:</strong>{{ $rc_validation[0]['rc_validation']['data']['pucc_upto' ] }}</p>
-                                <p><strong>rc_status: </strong>{{ $rc_validation[0]['rc_validation']['data']['rc_status' ] }}</p>
+                                >
                             </div>
                         </div>
                     </div>

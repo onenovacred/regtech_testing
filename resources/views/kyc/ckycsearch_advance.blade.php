@@ -41,11 +41,11 @@
                                         name="pan_number" value="{{ old('pan_number') }}" placeholder="Ex: ABCDE1234N"
                                         required>
                                 </div>
-                                <div class="form-group">
+                                <!-- <div class="form-group">
                                     <label for="name">DOB</label>
                                     <input type="text" class="form-control" id="dob" name="dob"
                                         value="{{ old('dob') }}" placeholder="Ex: DD-MM-YYYY" required>
-                                </div>
+                                </div> -->
                                 <button type="submit" class="btn btn-success">Verify</button>
                             </form>
                         </div>

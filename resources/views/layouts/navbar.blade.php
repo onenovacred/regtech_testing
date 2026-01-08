@@ -1,9 +1,22 @@
-<div class="container">
+ <!-- <html>
+     <head>
+        <script src="https://cdn.pagesense.io/js/895107392/8edde5c9c87c4abdab8f2fea45daae45.js"></script>
+    </head>
+</html> -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-5MZNFDVV');</script>
 
+<div class="container">
+   
     <div class="container-fluid pl-sm-5 pr-sm-5">
 
  <nav class="navbar navbar-expand-lg navbar-light" style="padding:1rem 1rem;font-size: 16px; font-weight: bold">
-    <a class="" href="{{ url('/')}}" style="width:39%"><img src="{{asset('logos/regtech.png')}}" height="50px" style="margin:-20px; width:13%"><img class="pt-2 pl-2" src="{{asset('logos/regtech4.png')}}" style="width: 40%"></a>
+    <!-- <a class="" href="{{ url('/')}}" style="width:39%"><img src="{{asset('logos/regtech.png')}}" height="50px" style="margin:-20px; width:13%"><img class="pt-2 pl-2" src="{{asset('logos/regtech4.png')}}" style="width: 40%"></a> -->
+     <a class="" href="{{ url('/')}}" style="width:39%"><img class="pt-2 pl-2" src="{{asset('logos/regtechapinew.jpg')}}" style="width: 60%"></a>
+    
     
     
     <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarText" aria-controls="navbarText" aria-expanded="false" aria-label="Toggle navigation">

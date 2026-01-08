@@ -21,6 +21,13 @@
 </li>
 
 <li class="nav-item">
+    <a class="nav-link" href="{{route('api.sitechange')}}">
+        <i class="fa fa-fw fa-th"></i>
+        <p>Website</p>
+    </a>
+</li>
+
+<li class="nav-item">
     <a class="nav-link" href="{{route('scheme_type.list')}}">
         <i class="fa fa-fw fa-th"></i>
         <p>Scheme Type Master</p>
