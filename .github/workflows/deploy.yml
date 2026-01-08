@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # ✅ IMPORTANT FIX
 
       - name: Show changed files
         run: |
@@ -29,4 +31,3 @@ jobs:
           script: |
             cd /var/www/html
             ./deploy.sh
-
