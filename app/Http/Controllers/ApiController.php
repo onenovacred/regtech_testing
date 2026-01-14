@@ -102,6 +102,5 @@ class ApiController extends Controller
     public function api_docs() {
     	return view('api.api_docs');
     }
-   
 }
 
