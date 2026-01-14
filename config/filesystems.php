@@ -44,11 +44,11 @@ return [
 
          's3' => [
             'driver' => 's3',
-            'key' => 'AKIAXFDAJPLFMIWJJO2F',
-            'secret' => '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',
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
             'region' => env('AWS_DEFAULT_REGION'),
-            'bucket' => 'docboyznova11',
-            'url' => 'https://docboyznova11.s3.ap-south-1.amazonaws.com',
+            'bucket' => env('AWS_BUCKET'),
+            'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
              // 'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
         ], 
